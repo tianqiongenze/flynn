@@ -51,3 +51,28 @@ func (e *LabelFilter_Expression) Match(labels map[string]string) bool {
 	}
 	return true
 }
+
+type ReleaseTypeMatcher struct {
+	types map[ReleaseType]struct{}
+}
+
+func NewReleaseTypeMatcher(types []ReleaseType) *ReleaseTypeMatcher {
+	_types := make(map[ReleaseType]struct{}, len(types))
+	for _, t := range types {
+		_types[t] = struct{}{}
+	}
+	return &ReleaseTypeMatcher{types: _types}
+}
+
+func (m *ReleaseTypeMatcher) Match(t ReleaseType) bool {
+	if len(m.types) == 0 {
+		return true
+	}
+	if _, ok := m.types[ReleaseType_ANY]; ok {
+		return true
+	}
+	if _, ok := m.types[t]; ok {
+		return true
+	}
+	return false
+}

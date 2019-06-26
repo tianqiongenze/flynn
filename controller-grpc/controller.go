@@ -1006,20 +1006,14 @@ func (s *server) listDeployments(req *protobuf.StreamDeploymentsRequest) ([]*pro
 	}
 
 	var filtered []*protobuf.ExpandedDeployment
-	typeFilters := req.TypeFilters
-	filters := make(map[protobuf.ReleaseType]struct{}, len(typeFilters))
-	for _, f := range typeFilters {
-		filters[f] = struct{}{}
-	}
-	if len(typeFilters) == 0 {
-		filtered = deployments
-	} else if _, ok := filters[protobuf.ReleaseType_ANY]; ok {
+	typeMatcher := protobuf.NewReleaseTypeMatcher(req.TypeFilters)
+	if len(req.TypeFilters) == 0 {
 		filtered = deployments
 	} else {
 		filtered = make([]*protobuf.ExpandedDeployment, 0, len(deployments))
 		for _, ed := range deployments {
 			// filter by type of deployment
-			if _, ok := filters[ed.Type]; !ok {
+			if !typeMatcher.Match(ed.Type) {
 				continue
 			}
 			filtered = append(filtered, ed)
@@ -1029,7 +1023,7 @@ func (s *server) listDeployments(req *protobuf.StreamDeploymentsRequest) ([]*pro
 	return filtered, nil
 }
 
-func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, srv protobuf.Controller_StreamDeploymentsServer) error {
+func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, stream protobuf.Controller_StreamDeploymentsServer) error {
 	unary := !(req.StreamUpdates || req.StreamCreates)
 
 	appIDs := utils.ParseAppIDsFromNameFilters(req.NameFilters)
@@ -1049,7 +1043,7 @@ func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, srv p
 
 	sendResponse := func() {
 		deploymentsMtx.RLock()
-		srv.Send(&protobuf.StreamDeploymentsResponse{
+		stream.Send(&protobuf.StreamDeploymentsResponse{
 			Deployments: deployments,
 		})
 		deploymentsMtx.RUnlock()
@@ -1077,13 +1071,32 @@ func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, srv p
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		typeMatcher := protobuf.NewReleaseTypeMatcher(req.TypeFilters)
 		for {
 			ctEvent, ok := <-sub.Events
 			if !ok {
 				break
 			}
-			// TODO(jvatic): send ExpandedDeployment
-			fmt.Printf("%#v\n", ctEvent)
+			var deploymentEvent *ct.DeploymentEvent
+			if err := json.Unmarshal(ctEvent.Data, &deploymentEvent); err != nil {
+				// TODO(jvatic): handle error
+				fmt.Printf("StreamDeployments Error unmarshalling event: %v\n", err)
+				continue
+			}
+			ctd, err := s.deploymentRepo.GetExpanded(ctEvent.ObjectID)
+			if err != nil {
+				// TODO(jvatic): handle error
+				fmt.Printf("StreamDeployments Error fetching deployment: %v\n", err)
+				continue
+			}
+			ctd.Status = deploymentEvent.Status
+			d := utils.ConvertExpandedDeployment(ctd)
+			if !typeMatcher.Match(d.Type) {
+				continue
+			}
+			stream.Send(&protobuf.StreamDeploymentsResponse{
+				Deployments: []*protobuf.ExpandedDeployment{d},
+			})
 		}
 	}()
 	wg.Wait()

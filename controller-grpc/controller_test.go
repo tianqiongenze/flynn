@@ -13,7 +13,9 @@ import (
 	"github.com/flynn/flynn/controller-grpc/utils"
 	"github.com/flynn/flynn/controller/data"
 	"github.com/flynn/flynn/controller/schema"
+	ct "github.com/flynn/flynn/controller/types"
 	"github.com/flynn/flynn/pkg/postgres"
+	"github.com/flynn/flynn/pkg/random"
 	"github.com/flynn/flynn/pkg/testutils/postgres"
 	. "github.com/flynn/go-check"
 	que "github.com/flynn/que-go"
@@ -174,6 +176,20 @@ func (s *S) createTestDeployment(c *C, releaseName string) *protobuf.ExpandedDep
 	ctDeployment, err := s.conf.deploymentRepo.AddExpanded(appID, releaseID)
 	c.Assert(err, IsNil)
 	return utils.ConvertExpandedDeployment(ctDeployment)
+}
+
+func (s *S) createTestArtifact(c *C, in *ct.Artifact) *ct.Artifact {
+	if in.Type == "" {
+		in.Type = ct.ArtifactTypeFlynn
+		in.RawManifest = ct.ImageManifest{
+			Type: ct.ImageManifestTypeV1,
+		}.RawManifest()
+	}
+	if in.URI == "" {
+		in.URI = fmt.Sprintf("https://example.com/%s", random.String(8))
+	}
+	c.Assert(s.conf.artifactRepo.Add(in), IsNil)
+	return in
 }
 
 func (s *S) TestOptionsRequest(c *C) { // grpc-web
@@ -805,16 +821,21 @@ func (s *S) TestStreamDeployments(c *C) {
 	testApp1 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-5-1"})
 	testApp2 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-5-2"})
 	testApp3 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-5-3"})
-	testRelease1 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Labels: map[string]string{"i": "1"}})
-	testRelease2 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Labels: map[string]string{"i": "2"}})
-	testRelease3 := s.createTestRelease(c, testApp3.Name, &protobuf.Release{Labels: map[string]string{"i": "3"}})
+	testArtifact1 := s.createTestArtifact(c, &ct.Artifact{})
+	testArtifact2 := s.createTestArtifact(c, &ct.Artifact{})
+	testRelease1 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Labels: map[string]string{"i": "1"}, Artifacts: []string{testArtifact1.ID}})
+	testRelease2 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Labels: map[string]string{"i": "2"}, Artifacts: []string{testArtifact1.ID}})
+	testRelease3 := s.createTestRelease(c, testApp3.Name, &protobuf.Release{Labels: map[string]string{"i": "3"}, Artifacts: []string{testArtifact2.ID}})
 	testRelease4 := s.createTestRelease(c, testApp2.Name, &protobuf.Release{Labels: map[string]string{"i": "4"}})
 	testDeployment1 := s.createTestDeployment(c, testRelease1.Name)
 	testDeployment2 := s.createTestDeployment(c, testRelease2.Name)
 	testDeployment3 := s.createTestDeployment(c, testRelease3.Name)
 	testDeployment4 := s.createTestDeployment(c, testRelease4.Name)
 
-	fmt.Println(testDeployment1.Name, testDeployment2.Name)
+	c.Assert(testDeployment1.Type, Equals, protobuf.ReleaseType_CODE)
+	c.Assert(testDeployment2.Type, Equals, protobuf.ReleaseType_CONFIG)
+	c.Assert(testDeployment3.Type, Equals, protobuf.ReleaseType_CODE)
+	c.Assert(testDeployment4.Type, Equals, protobuf.ReleaseType_CONFIG)
 
 	unaryReceiveDeployments := func(req *protobuf.StreamDeploymentsRequest) (res *protobuf.StreamDeploymentsResponse, receivedEOF bool) {
 		ctx, ctxCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -840,19 +861,36 @@ func (s *S) TestStreamDeployments(c *C) {
 		return
 	}
 
+	streamDeploymentsWithCancel := func(req *protobuf.StreamDeploymentsRequest) (protobuf.Controller_StreamDeploymentsClient, context.CancelFunc) {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		stream, err := s.grpc.StreamDeployments(ctx, req)
+		c.Assert(err, IsNil)
+		return stream, cancel
+	}
+
+	receiveDeploymentsStream := func(stream protobuf.Controller_StreamDeploymentsClient) *protobuf.StreamDeploymentsResponse {
+		res, err := stream.Recv()
+		if err == io.EOF || isErrCanceled(err) || isErrDeadlineExceeded(err) {
+			return nil
+		}
+		c.Assert(err, IsNil)
+		return res
+	}
+
 	assertDeploymentsEqual := func(c *C, a, b *protobuf.ExpandedDeployment) {
-		c.Assert(a.Name, DeepEquals, b.Name)
-		c.Assert(a.OldRelease, DeepEquals, b.OldRelease)
-		c.Assert(a.NewRelease, DeepEquals, b.NewRelease)
-		c.Assert(a.Type, DeepEquals, b.Type)
-		c.Assert(a.Strategy, DeepEquals, b.Strategy)
-		c.Assert(a.Status, DeepEquals, b.Status)
-		c.Assert(a.Processes, DeepEquals, b.Processes)
-		c.Assert(a.Tags, DeepEquals, b.Tags)
-		c.Assert(a.DeployTimeout, DeepEquals, b.DeployTimeout)
-		c.Assert(a.CreateTime, DeepEquals, b.CreateTime)
-		c.Assert(a.ExpireTime, DeepEquals, b.ExpireTime)
-		c.Assert(a.EndTime, DeepEquals, b.EndTime)
+		comment := Commentf("Obtained %#v", b)
+		c.Assert(a.Name, DeepEquals, b.Name, comment)
+		c.Assert(a.OldRelease, DeepEquals, b.OldRelease, comment)
+		c.Assert(a.NewRelease, DeepEquals, b.NewRelease, comment)
+		c.Assert(a.Type, DeepEquals, b.Type, comment)
+		c.Assert(a.Strategy, DeepEquals, b.Strategy, comment)
+		c.Assert(a.Status, DeepEquals, b.Status, comment)
+		c.Assert(a.Processes, DeepEquals, b.Processes, comment)
+		c.Assert(a.Tags, DeepEquals, b.Tags, comment)
+		c.Assert(a.DeployTimeout, DeepEquals, b.DeployTimeout, comment)
+		c.Assert(a.CreateTime, DeepEquals, b.CreateTime, comment)
+		c.Assert(a.ExpireTime, DeepEquals, b.ExpireTime, comment)
+		c.Assert(a.EndTime, DeepEquals, b.EndTime, comment)
 	}
 
 	// test fetching the latest deployment
@@ -901,11 +939,106 @@ func (s *S) TestStreamDeployments(c *C) {
 	assertDeploymentsEqual(c, res.Deployments[2], testDeployment1)
 	c.Assert(receivedEOF, Equals, true)
 
+	// test fetching multiple deployments by type [ANY]
+	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 1, TypeFilters: []protobuf.ReleaseType{protobuf.ReleaseType_ANY}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 1)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment4)
+	c.Assert(receivedEOF, Equals, true)
+
+	// test fetching multiple deployments by type [CODE]
+	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{TypeFilters: []protobuf.ReleaseType{protobuf.ReleaseType_CODE}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 2)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment3)
+	assertDeploymentsEqual(c, res.Deployments[1], testDeployment1)
+	c.Assert(receivedEOF, Equals, true)
+
+	// test fetching multiple deployments by type [CONFIG]
+	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{TypeFilters: []protobuf.ReleaseType{protobuf.ReleaseType_CONFIG}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 2)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment4)
+	assertDeploymentsEqual(c, res.Deployments[1], testDeployment2)
+	c.Assert(receivedEOF, Equals, true)
+
 	// test streaming creates for specific app
+	stream, cancel := streamDeploymentsWithCancel(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testApp2.Name}, StreamCreates: true})
+	receiveDeploymentsStream(stream) // initial page
+	testRelease5 := s.createTestRelease(c, testApp2.Name, &protobuf.Release{Labels: map[string]string{"i": "5"}})
+	testDeployment5 := s.createTestDeployment(c, testRelease5.Name)
+	res = receiveDeploymentsStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 1)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment5)
+	cancel()
 
 	// test creates are not streamed when flag not set
+	stream, cancel = streamDeploymentsWithCancel(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testApp2.Name}})
+	receiveDeploymentsStream(stream) // initial page
+	testRelease6 := s.createTestRelease(c, testApp2.Name, &protobuf.Release{Labels: map[string]string{"i": "6"}})
+	s.createTestDeployment(c, testRelease6.Name)
+	res = receiveDeploymentsStream(stream)
+	c.Assert(res, IsNil)
+	cancel()
 
 	// test streaming creates that don't match the NameFilters
+	stream, cancel = streamDeploymentsWithCancel(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testApp2.Name}, StreamCreates: true})
+	receiveDeploymentsStream(stream) // initial page
+	testRelease7 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Labels: map[string]string{"i": "7"}})
+	s.createTestDeployment(c, testRelease7.Name)
+	res = receiveDeploymentsStream(stream)
+	c.Assert(res, IsNil)
+	cancel()
+
+	// test streaming creates without filters
+	stream, cancel = streamDeploymentsWithCancel(&protobuf.StreamDeploymentsRequest{StreamCreates: true})
+	receiveDeploymentsStream(stream) // initial page
+	testRelease8 := s.createTestRelease(c, testApp2.Name, &protobuf.Release{Labels: map[string]string{"i": "8"}})
+	testDeployment8 := s.createTestDeployment(c, testRelease8.Name)
+	res = receiveDeploymentsStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 1)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment8)
+	cancel()
+
+	// test streaming creates that don't match the TypeFilters
+	stream, cancel = streamDeploymentsWithCancel(&protobuf.StreamDeploymentsRequest{TypeFilters: []protobuf.ReleaseType{protobuf.ReleaseType_CODE}, StreamCreates: true})
+	receiveDeploymentsStream(stream) // initial page
+	testRelease9 := s.createTestRelease(c, testApp3.Name, &protobuf.Release{Labels: map[string]string{"i": "9"}, Artifacts: testRelease3.Artifacts})
+	s.createTestDeployment(c, testRelease9.Name) // doesn't match TypeFilters
+	testRelease10 := s.createTestRelease(c, testApp3.Name, &protobuf.Release{Labels: map[string]string{"i": "10"}})
+	testDeployment10 := s.createTestDeployment(c, testRelease10.Name) // matches TypeFilters
+	res = receiveDeploymentsStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 1)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment10)
+	cancel()
 
 	// test unary pagination
+	// res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 1})
+	// c.Assert(res, Not(IsNil))
+	// c.Assert(len(res.Deployments), Equals, 1)
+	// c.Assert(res.Deployments[0], DeepEquals, testDeployment9)
+	// c.Assert(receivedEOF, Equals, true)
+	// c.Assert(res.NextPageToken, Not(Equals), "")
+	// c.Assert(res.PageComplete, Equals, true)
+	// for i, testDeployment := range []*protobuf.Deployment{testDeployment8, testDeployment7, testDeployment6, testDeployment5, testDeployment4, testDeployment3} {
+	// 	comment := Commentf("iteraction %d", i)
+	// 	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 1, PageToken: res.NextPageToken})
+	// 	c.Assert(res, Not(IsNil), comment)
+	// 	c.Assert(len(res.Deployments), Equals, 1, comment)
+	// 	c.Assert(res.Deployments[0], DeepEquals, testDeployment, comment)
+	// 	c.Assert(receivedEOF, Equals, true, comment)
+	// 	c.Assert(res.NextPageToken, Not(Equals), "", comment)
+	// 	c.Assert(res.PageComplete, Equals, true, comment)
+	// }
+	// res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 2, PageToken: res.NextPageToken})
+	// c.Assert(res, Not(IsNil))
+	// c.Assert(len(res.Deployments), Equals, 2)
+	// c.Assert(res.Deployments[0], DeepEquals, testDeployment2)
+	// c.Assert(res.Deployments[1], DeepEquals, testDeployment1)
+	// c.Assert(receivedEOF, Equals, true)
+	// c.Assert(res.NextPageToken, Equals, "")
+	// c.Assert(res.PageComplete, Equals, true)
 }
