@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"path"
+	"reflect"
 	"strings"
 	"time"
 
@@ -34,28 +35,24 @@ func timestampFromProto(t *tspb.Timestamp) *time.Time {
 	return &ts
 }
 
-func ParseAppIDsFromNameFilters(nameFilters []string) []string {
-	appIDs := make([]string, 0, len(nameFilters))
+func ParseIDsFromNameFilters(nameFilters []string, resource string) []string {
+	ids := make([]string, 0, len(nameFilters))
 	for _, name := range nameFilters {
-		appID := ParseIDFromName(name, "apps")
+		appID := ParseIDFromName(name, resource)
 		if appID == "" || !strings.HasSuffix(name, appID) {
 			continue
 		}
-		appIDs = append(appIDs, appID)
+		ids = append(ids, appID)
 	}
-	return appIDs
+	return ids
+}
+
+func ParseAppIDsFromNameFilters(nameFilters []string) []string {
+	return ParseIDsFromNameFilters(nameFilters, "apps")
 }
 
 func ParseReleaseIDsFromNameFilters(nameFilters []string) []string {
-	releaseIDs := make([]string, 0, len(nameFilters))
-	for _, name := range nameFilters {
-		releaseID := ParseIDFromName(name, "releases")
-		if releaseID == "" {
-			continue
-		}
-		releaseIDs = append(releaseIDs, releaseID)
-	}
-	return releaseIDs
+	return ParseIDsFromNameFilters(nameFilters, "releases")
 }
 
 func ParseIDFromName(name string, resource string) string {
@@ -226,6 +223,9 @@ func ConvertError(err error, message string, args ...interface{}) error {
 }
 
 func ConvertDeploymentTags(from map[string]map[string]string) map[string]*protobuf.DeploymentProcessTags {
+	if from == nil {
+		return nil
+	}
 	to := make(map[string]*protobuf.DeploymentProcessTags, len(from))
 	for k, v := range from {
 		to[k] = &protobuf.DeploymentProcessTags{Tags: v}
@@ -234,6 +234,9 @@ func ConvertDeploymentTags(from map[string]map[string]string) map[string]*protob
 }
 
 func ConvertDeploymentProcesses(from map[string]int) map[string]int32 {
+	if from == nil {
+		return nil
+	}
 	to := make(map[string]int32, len(from))
 	for k, v := range from {
 		to[k] = int32(v)
@@ -260,6 +263,38 @@ func ConvertDeployment(from *ct.Deployment) *protobuf.Deployment {
 		Name:          fmt.Sprintf("apps/%s/deployments/%s", from.AppID, from.ID),
 		OldRelease:    fmt.Sprintf("apps/%s/releases/%s", from.AppID, from.OldReleaseID),
 		NewRelease:    fmt.Sprintf("apps/%s/releases/%s", from.AppID, from.NewReleaseID),
+		Strategy:      from.Strategy,
+		Status:        ConvertDeploymentStatus(from.Status),
+		Processes:     ConvertDeploymentProcesses(from.Processes),
+		Tags:          ConvertDeploymentTags(from.Tags),
+		DeployTimeout: from.DeployTimeout,
+		CreateTime:    TimestampProto(from.CreatedAt),
+		EndTime:       TimestampProto(from.FinishedAt),
+	}
+}
+
+func getReleaseType(prev, r *protobuf.Release) protobuf.ReleaseType {
+	if prev != nil {
+		if reflect.DeepEqual(prev.Artifacts, r.Artifacts) {
+			return protobuf.ReleaseType_CONFIG
+		}
+	} else if len(r.Artifacts) == 0 {
+		return protobuf.ReleaseType_CONFIG
+	}
+	return protobuf.ReleaseType_CODE
+}
+
+func ConvertExpandedDeployment(from *ct.ExpandedDeployment) *protobuf.ExpandedDeployment {
+	var oldRelease *protobuf.Release
+	if from.OldRelease != nil {
+		oldRelease = ConvertRelease(from.OldRelease)
+	}
+	newRelease := ConvertRelease(from.NewRelease)
+	return &protobuf.ExpandedDeployment{
+		Name:          fmt.Sprintf("apps/%s/deployments/%s", from.AppID, from.ID),
+		OldRelease:    oldRelease,
+		NewRelease:    newRelease,
+		Type:          getReleaseType(oldRelease, newRelease),
 		Strategy:      from.Strategy,
 		Status:        ConvertDeploymentStatus(from.Status),
 		Processes:     ConvertDeploymentProcesses(from.Processes),

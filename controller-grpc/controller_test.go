@@ -1,6 +1,7 @@
 package main
 
 import (
+	fmt "fmt"
 	"io"
 	"net"
 	"net/http"
@@ -165,6 +166,14 @@ func (s *S) createTestRelease(c *C, parentName string, release *protobuf.Release
 	err := s.conf.releaseRepo.Add(ctRelease)
 	c.Assert(err, IsNil)
 	return utils.ConvertRelease(ctRelease)
+}
+
+func (s *S) createTestDeployment(c *C, releaseName string) *protobuf.ExpandedDeployment {
+	appID := utils.ParseIDFromName(releaseName, "apps")
+	releaseID := utils.ParseIDFromName(releaseName, "releases")
+	ctDeployment, err := s.conf.deploymentRepo.AddExpanded(appID, releaseID)
+	c.Assert(err, IsNil)
+	return utils.ConvertExpandedDeployment(ctDeployment)
 }
 
 func (s *S) TestOptionsRequest(c *C) { // grpc-web
@@ -726,4 +735,177 @@ func (s *S) TestStreamReleases(c *C) {
 	c.Assert(receivedEOF, Equals, true)
 	c.Assert(res.NextPageToken, Equals, "")
 	c.Assert(res.PageComplete, Equals, true)
+}
+
+func (s *S) TestStreamScales(c *C) {
+	// test fetching the latest scale request
+
+	// test fetching a single scale request by name
+
+	// test fetching a single scale request by app name
+
+	// test fetching multiple scale requests by name
+
+	// test fetching multiple scale requests by app name
+
+	// test fetching multiple scale requests by a mixture of app name and scale request name
+
+	// test filtering by labels [OP_IN]
+
+	// test filtering by labels [OP_NOT_IN]
+
+	// test filtering by labels [OP_EXISTS]
+
+	// test filtering by labels [OP_NOT_EXISTS]
+
+	// test streaming creates for specific app
+
+	// test creates are not streamed when flag not set
+
+	// test streaming creates that don't match the LabelFilters [OP_EXISTS]
+
+	// test streaming creates that don't match the NameFilters
+
+	// test unary pagination
+}
+
+func (s *S) TestStreamFormations(c *C) {
+	// test fetching the latest formation
+
+	// test fetching a single formation by name
+
+	// test fetching a single formation by app name
+
+	// test fetching multiple formations by name
+
+	// test fetching multiple formations by app name
+
+	// test fetching multiple formations by a mixture of app name and formation name
+
+	// test filtering by labels [OP_IN]
+
+	// test filtering by labels [OP_NOT_IN]
+
+	// test filtering by labels [OP_EXISTS]
+
+	// test filtering by labels [OP_NOT_EXISTS]
+
+	// test streaming creates for specific app
+
+	// test creates are not streamed when flag not set
+
+	// test streaming creates that don't match the LabelFilters [OP_EXISTS]
+
+	// test streaming creates that don't match the NameFilters
+
+	// test unary pagination
+}
+
+func (s *S) TestStreamDeployments(c *C) {
+	testApp1 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-5-1"})
+	testApp2 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-5-2"})
+	testApp3 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-5-3"})
+	testRelease1 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Labels: map[string]string{"i": "1"}})
+	testRelease2 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Labels: map[string]string{"i": "2"}})
+	testRelease3 := s.createTestRelease(c, testApp3.Name, &protobuf.Release{Labels: map[string]string{"i": "3"}})
+	testRelease4 := s.createTestRelease(c, testApp2.Name, &protobuf.Release{Labels: map[string]string{"i": "4"}})
+	testDeployment1 := s.createTestDeployment(c, testRelease1.Name)
+	testDeployment2 := s.createTestDeployment(c, testRelease2.Name)
+	testDeployment3 := s.createTestDeployment(c, testRelease3.Name)
+	testDeployment4 := s.createTestDeployment(c, testRelease4.Name)
+
+	fmt.Println(testDeployment1.Name, testDeployment2.Name)
+
+	unaryReceiveDeployments := func(req *protobuf.StreamDeploymentsRequest) (res *protobuf.StreamDeploymentsResponse, receivedEOF bool) {
+		ctx, ctxCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer func() {
+			if !receivedEOF {
+				ctxCancel()
+			}
+		}()
+		stream, err := s.grpc.StreamDeployments(ctx, req)
+		c.Assert(err, IsNil)
+		for i := 0; i < 2; i++ {
+			r, err := stream.Recv()
+			if err == io.EOF {
+				receivedEOF = true
+				return
+			}
+			if isErrCanceled(err) {
+				return
+			}
+			c.Assert(err, IsNil)
+			res = r
+		}
+		return
+	}
+
+	assertDeploymentsEqual := func(c *C, a, b *protobuf.ExpandedDeployment) {
+		c.Assert(a.Name, DeepEquals, b.Name)
+		c.Assert(a.OldRelease, DeepEquals, b.OldRelease)
+		c.Assert(a.NewRelease, DeepEquals, b.NewRelease)
+		c.Assert(a.Type, DeepEquals, b.Type)
+		c.Assert(a.Strategy, DeepEquals, b.Strategy)
+		c.Assert(a.Status, DeepEquals, b.Status)
+		c.Assert(a.Processes, DeepEquals, b.Processes)
+		c.Assert(a.Tags, DeepEquals, b.Tags)
+		c.Assert(a.DeployTimeout, DeepEquals, b.DeployTimeout)
+		c.Assert(a.CreateTime, DeepEquals, b.CreateTime)
+		c.Assert(a.ExpireTime, DeepEquals, b.ExpireTime)
+		c.Assert(a.EndTime, DeepEquals, b.EndTime)
+	}
+
+	// test fetching the latest deployment
+	res, receivedEOF := unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 1})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 1)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment4)
+	c.Assert(receivedEOF, Equals, true)
+
+	// test fetching a single deployment by name
+	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testDeployment2.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 1)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment2)
+	c.Assert(receivedEOF, Equals, true)
+
+	// test fetching a single deployment by app name
+	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testApp3.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 1)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment3)
+	c.Assert(receivedEOF, Equals, true)
+
+	// test fetching multiple deployments by name
+	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testDeployment3.Name, testDeployment2.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 2)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment3)
+	assertDeploymentsEqual(c, res.Deployments[1], testDeployment2)
+	c.Assert(receivedEOF, Equals, true)
+
+	// test fetching multiple deployments by app name
+	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testApp1.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 2)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment2)
+	assertDeploymentsEqual(c, res.Deployments[1], testDeployment1)
+	c.Assert(receivedEOF, Equals, true)
+
+	// test fetching multiple deployments by a mixture of app name and deployment name
+	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testDeployment3.Name, testApp1.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 3)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment3)
+	assertDeploymentsEqual(c, res.Deployments[1], testDeployment2)
+	assertDeploymentsEqual(c, res.Deployments[2], testDeployment1)
+	c.Assert(receivedEOF, Equals, true)
+
+	// test streaming creates for specific app
+
+	// test creates are not streamed when flag not set
+
+	// test streaming creates that don't match the NameFilters
+
+	// test unary pagination
 }

@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"reflect"
 	"sync"
 	"syscall"
 	"time"
@@ -984,111 +983,37 @@ func (s *server) CreateRelease(ctx context.Context, req *protobuf.CreateReleaseR
 	return utils.ConvertRelease(ctRelease), nil
 }
 
-func (s *server) listDeployments(appID string, typeFilters []protobuf.ReleaseType) ([]*protobuf.ExpandedDeployment, error) {
-	ctDeployments, err := s.deploymentRepo.List(appID)
+func (s *server) listDeployments(req *protobuf.StreamDeploymentsRequest) ([]*protobuf.ExpandedDeployment, error) {
+	pageToken, err := data.ParsePageToken(req.PageToken)
+	if err != nil {
+		return nil, err
+	}
+	if req.PageSize > 0 {
+		pageToken.Size = int(req.PageSize)
+	}
+	ctExpandedDeployments, err := s.deploymentRepo.ListExpanded(data.ListDeploymentOptions{
+		PageToken:     pageToken,
+		AppIDs:        utils.ParseIDsFromNameFilters(req.NameFilters, "apps"),
+		DeploymentIDs: utils.ParseIDsFromNameFilters(req.NameFilters, "deployments"),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	getReleaseType := func(prev, r *protobuf.Release) protobuf.ReleaseType {
-		if prev != nil {
-			if reflect.DeepEqual(prev.Artifacts, r.Artifacts) {
-				return protobuf.ReleaseType_CONFIG
-			}
-		} else if len(r.Artifacts) == 0 {
-			return protobuf.ReleaseType_CONFIG
-		}
-		return protobuf.ReleaseType_CODE
+	deployments := make([]*protobuf.ExpandedDeployment, 0, len(ctExpandedDeployments))
+	for _, d := range ctExpandedDeployments {
+		deployments = append(deployments, utils.ConvertExpandedDeployment(d))
 	}
-
-	var wg sync.WaitGroup
-	var deploymentsMtx sync.Mutex
-	deployments := make([]*protobuf.ExpandedDeployment, len(ctDeployments))
-
-	for i, ctd := range ctDeployments {
-		d := utils.ConvertDeployment(ctd)
-		ed := &protobuf.ExpandedDeployment{
-			Name:          d.Name,
-			Strategy:      d.Strategy,
-			Status:        d.Status,
-			Processes:     d.Processes,
-			Tags:          d.Tags,
-			DeployTimeout: d.DeployTimeout,
-			CreateTime:    d.CreateTime,
-			ExpireTime:    d.ExpireTime,
-			EndTime:       d.EndTime,
-		}
-		if d.OldRelease != "" {
-			ed.OldRelease = &protobuf.Release{
-				Name: d.OldRelease,
-			}
-		}
-		if d.NewRelease != "" {
-			ed.NewRelease = &protobuf.Release{
-				Name: d.NewRelease,
-			}
-		}
-
-		wg.Add(1)
-		go func(ed *protobuf.ExpandedDeployment) {
-			defer wg.Done()
-			var wgInner sync.WaitGroup
-
-			var oldRelease *protobuf.Release
-			if ed.OldRelease != nil {
-				wgInner.Add(1)
-				go func() {
-					defer wgInner.Done()
-					ctRelease, err := s.releaseRepo.Get(utils.ParseIDFromName(ed.OldRelease.Name, "releases"))
-					if err != nil {
-						// DEBUG
-						fmt.Printf("listDeployments: Error getting OldRelease(%q): %v\n", ed.OldRelease.Name, err)
-						return
-					}
-					oldRelease = utils.ConvertRelease(ctRelease.(*ct.Release))
-				}()
-			}
-
-			var newRelease *protobuf.Release
-			if ed.NewRelease != nil {
-				wgInner.Add(1)
-				go func() {
-					defer wgInner.Done()
-					ctRelease, err := s.releaseRepo.Get(utils.ParseIDFromName(ed.NewRelease.Name, "releases"))
-					if err != nil {
-						// DEBUG
-						fmt.Printf("listDeployments: Error getting NewRelease(%q): %v\n", ed.NewRelease.Name, err)
-						return
-					}
-					newRelease = utils.ConvertRelease(ctRelease.(*ct.Release))
-				}()
-			}
-
-			// wait for releases
-			wgInner.Wait()
-
-			deploymentsMtx.Lock()
-			ed.Type = getReleaseType(oldRelease, newRelease)
-
-			ed.OldRelease = oldRelease
-			ed.NewRelease = newRelease
-			deploymentsMtx.Unlock()
-		}(ed)
-
-		deploymentsMtx.Lock()
-		deployments[i] = ed
-		deploymentsMtx.Unlock()
-	}
-
-	// wait for releases and deployment types
-	wg.Wait()
 
 	var filtered []*protobuf.ExpandedDeployment
+	typeFilters := req.TypeFilters
 	filters := make(map[protobuf.ReleaseType]struct{}, len(typeFilters))
 	for _, f := range typeFilters {
 		filters[f] = struct{}{}
 	}
-	if _, ok := filters[protobuf.ReleaseType_ANY]; ok {
+	if len(typeFilters) == 0 {
+		filtered = deployments
+	} else if _, ok := filters[protobuf.ReleaseType_ANY]; ok {
 		filtered = deployments
 	} else {
 		filtered = make([]*protobuf.ExpandedDeployment, 0, len(deployments))
@@ -1105,37 +1030,40 @@ func (s *server) listDeployments(appID string, typeFilters []protobuf.ReleaseTyp
 }
 
 func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, srv protobuf.Controller_StreamDeploymentsServer) error {
+	unary := !(req.StreamUpdates || req.StreamCreates)
+
 	appIDs := utils.ParseAppIDsFromNameFilters(req.NameFilters)
+	if len(appIDs) == 0 {
+		appIDs = nil
+	}
 
 	var deploymentsMtx sync.RWMutex
-	deployments := make(map[string][]*protobuf.ExpandedDeployment)
-	refreshDeployments := func(appID string) error {
+	var deployments []*protobuf.ExpandedDeployment
+	refreshDeployments := func() error {
 		deploymentsMtx.Lock()
 		defer deploymentsMtx.Unlock()
 		var err error
-		deployments[appID], err = s.listDeployments(appID, req.TypeFilters)
+		deployments, err = s.listDeployments(req)
 		return err
 	}
 
 	sendResponse := func() {
 		deploymentsMtx.RLock()
-		list := make([]*protobuf.ExpandedDeployment, 0)
-		for _, l := range deployments {
-			list = append(list, l...)
-		}
-		// TODO(jvatic): sort the list
 		srv.Send(&protobuf.StreamDeploymentsResponse{
-			Deployments: list,
+			Deployments: deployments,
 		})
 		deploymentsMtx.RUnlock()
 	}
 
-	for _, appID := range appIDs {
-		if err := refreshDeployments(appID); err != nil {
-			return err
-		}
+	if err := refreshDeployments(); err != nil {
+		// TODO(jvatic): return proper error code
+		return err
 	}
 	sendResponse()
+
+	if unary {
+		return nil
+	}
 
 	var wg sync.WaitGroup
 
@@ -1154,12 +1082,8 @@ func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, srv p
 			if !ok {
 				break
 			}
-			if err := refreshDeployments(ctEvent.AppID); err != nil {
-				// DEBUG
-				fmt.Printf("StreamDeployments: Error refreshing deployments: %s\n", err)
-				continue
-			}
-			sendResponse()
+			// TODO(jvatic): send ExpandedDeployment
+			fmt.Printf("%#v\n", ctEvent)
 		}
 	}()
 	wg.Wait()
