@@ -191,6 +191,11 @@ func (r *DeploymentRepo) Get(id string) (*ct.Deployment, error) {
 	return scanDeployment(row)
 }
 
+func (r *DeploymentRepo) GetExpanded(id string) (*ct.ExpandedDeployment, error) {
+	row := r.db.QueryRow("deployment_select_expanded", id)
+	return scanExpandedDeployment(row)
+}
+
 func (r *DeploymentRepo) List(appID string) ([]*ct.Deployment, error) {
 	rows, err := r.db.Query("deployment_list", appID)
 	if err != nil {

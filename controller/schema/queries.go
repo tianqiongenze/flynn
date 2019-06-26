@@ -39,6 +39,7 @@ var preparedStatements = map[string]string{
 	"deployment_list":                       deploymentListQuery,
 	"deployment_list_all_expanded":          deploymentListAllExpandedQuery,
 	"deployment_select":                     deploymentSelectQuery,
+	"deployment_select_expanded":            deploymentSelectExpandedQuery,
 	"deployment_insert":                     deploymentInsertQuery,
 	"deployment_update_finished_at":         deploymentUpdateFinishedAtQuery,
 	"deployment_update_finished_at_now":     deploymentUpdateFinishedAtNowQuery,
@@ -239,6 +240,35 @@ LEFT JOIN deployment_events e1
 LEFT OUTER JOIN deployment_events e2
   ON (d.deployment_id = e2.object_id::uuid AND e1.created_at < e2.created_at)
 WHERE e2.created_at IS NULL AND d.deployment_id = $1`
+	deploymentSelectExpandedQuery = `
+WITH deployment_events AS (SELECT * FROM events WHERE object_type = 'deployment')
+SELECT d.deployment_id, d.app_id, d.old_release_id, d.new_release_id,
+  d.strategy, e1.data->>'status' AS status,
+  d.processes, d.tags, d.deploy_timeout, d.created_at, d.finished_at,
+  ARRAY(
+		SELECT a.artifact_id
+		FROM release_artifacts a
+		WHERE a.release_id = old_r.release_id AND a.deleted_at IS NULL
+		ORDER BY a.index
+  ), old_r.env, old_r.processes, old_r.meta, old_r.created_at,
+  ARRAY(
+		SELECT a.artifact_id
+		FROM release_artifacts a
+		WHERE a.release_id = new_r.release_id AND a.deleted_at IS NULL
+		ORDER BY a.index
+  ), new_r.env, new_r.processes, new_r.meta, new_r.created_at
+FROM deployments d
+LEFT JOIN deployment_events e1
+  ON d.deployment_id = e1.object_id::uuid
+LEFT OUTER JOIN deployment_events e2
+  ON (d.deployment_id = e2.object_id::uuid AND e1.created_at < e2.created_at)
+LEFT OUTER JOIN releases old_r
+	ON d.old_release_id = old_r.release_id
+LEFT OUTER JOIN releases new_r
+	ON d.new_release_id = new_r.release_id
+WHERE e2.created_at IS NULL AND d.deployment_id = $1
+LIMIT 1
+`
 	deploymentListQuery = `
 WITH deployment_events AS (SELECT * FROM events WHERE object_type = 'deployment')
 SELECT d.deployment_id, d.app_id, d.old_release_id, d.new_release_id,
@@ -254,7 +284,7 @@ WHERE e2.created_at IS NULL AND d.app_id = $1 ORDER BY d.created_at DESC`
 	deploymentListAllExpandedQuery = `
 WITH deployment_events AS (SELECT * FROM events WHERE object_type = 'deployment')
 SELECT d.deployment_id, d.app_id, d.old_release_id, d.new_release_id,
-  strategy, e1.data->>'status' AS status,
+  d.strategy, e1.data->>'status' AS status,
   d.processes, d.tags, d.deploy_timeout, d.created_at, d.finished_at,
   ARRAY(
 		SELECT a.artifact_id
