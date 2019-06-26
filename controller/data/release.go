@@ -33,6 +33,10 @@ func (r *ReleaseRepo) SetFormationRepo(f *FormationRepo) {
 	r.formations = f
 }
 
+func splitArtifactIDs(artifactIDs string) []string {
+	return split(artifactIDs[1:len(artifactIDs)-1], ",")
+}
+
 func scanRelease(s postgres.Scanner) (*ct.Release, error) {
 	var artifactIDs string
 	release := &ct.Release{}
@@ -44,7 +48,7 @@ func scanRelease(s postgres.Scanner) (*ct.Release, error) {
 		return nil, err
 	}
 	if artifactIDs != "" {
-		release.ArtifactIDs = split(artifactIDs[1:len(artifactIDs)-1], ",")
+		release.ArtifactIDs = splitArtifactIDs(artifactIDs)
 	}
 	if len(release.ArtifactIDs) > 0 {
 		release.LegacyArtifactID = release.ArtifactIDs[0]

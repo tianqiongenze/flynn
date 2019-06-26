@@ -37,6 +37,7 @@ var preparedStatements = map[string]string{
 	"artifact_release_count":                artifactReleaseCountQuery,
 	"artifact_layer_count":                  artifactLayerCountQuery,
 	"deployment_list":                       deploymentListQuery,
+	"deployment_list_all_expanded":          deploymentListAllExpandedQuery,
 	"deployment_select":                     deploymentSelectQuery,
 	"deployment_insert":                     deploymentInsertQuery,
 	"deployment_update_finished_at":         deploymentUpdateFinishedAtQuery,
@@ -249,6 +250,46 @@ LEFT JOIN deployment_events e1
 LEFT OUTER JOIN deployment_events e2
   ON (d.deployment_id = e2.object_id::uuid AND e1.created_at < e2.created_at)
 WHERE e2.created_at IS NULL AND d.app_id = $1 ORDER BY d.created_at DESC`
+	// TODO(jvatic): pagination
+	deploymentListAllExpandedQuery = `
+WITH deployment_events AS (SELECT * FROM events WHERE object_type = 'deployment')
+SELECT d.deployment_id, d.app_id, d.old_release_id, d.new_release_id,
+  strategy, e1.data->>'status' AS status,
+  d.processes, d.tags, d.deploy_timeout, d.created_at, d.finished_at,
+  ARRAY(
+		SELECT a.artifact_id
+		FROM release_artifacts a
+		WHERE a.release_id = old_r.release_id AND a.deleted_at IS NULL
+		ORDER BY a.index
+  ), old_r.env, old_r.processes, old_r.meta, old_r.created_at,
+  ARRAY(
+		SELECT a.artifact_id
+		FROM release_artifacts a
+		WHERE a.release_id = new_r.release_id AND a.deleted_at IS NULL
+		ORDER BY a.index
+  ), new_r.env, new_r.processes, new_r.meta, new_r.created_at
+FROM deployments d
+LEFT JOIN deployment_events e1
+  ON d.deployment_id = e1.object_id::uuid
+LEFT OUTER JOIN deployment_events e2
+  ON (d.deployment_id = e2.object_id::uuid AND e1.created_at < e2.created_at)
+LEFT OUTER JOIN releases old_r
+	ON d.old_release_id = old_r.release_id
+LEFT OUTER JOIN releases new_r
+	ON d.new_release_id = new_r.release_id
+WHERE e2.created_at IS NULL
+AND CASE
+	WHEN array_length($1::text[], 1) > 0 AND array_length($2::text[], 1) > 0
+		THEN d.deployment_id::text = ANY($2::text[]) OR d.app_id::text = ANY($1::text[])
+	WHEN array_length($1::text[], 1) > 0
+		THEN d.app_id::text = ANY($1::text[])
+	WHEN array_length($2::text[], 1) > 0
+		THEN d.deployment_id::text = ANY($2::text[])
+	ELSE true
+END
+ORDER BY d.created_at DESC
+LIMIT $3
+`
 	eventSelectQuery = `
 SELECT event_id, app_id, object_id, object_type, data, op, created_at
 FROM events WHERE event_id = $1`

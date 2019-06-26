@@ -1,8 +1,6 @@
 package data
 
 import (
-	"strings"
-
 	ct "github.com/flynn/flynn/controller/types"
 	"github.com/flynn/flynn/pkg/postgres"
 	"github.com/flynn/flynn/pkg/random"
@@ -137,13 +135,6 @@ func (rr *ResourceRepo) RemoveApp(resourceID, appID string) (*ct.Resource, error
 		return nil, err
 	}
 	return r, tx.Commit()
-}
-
-func split(s string, sep string) []string {
-	if s == "" {
-		return nil
-	}
-	return strings.Split(s, ",")
 }
 
 func scanResource(s postgres.Scanner) (*ct.Resource, error) {

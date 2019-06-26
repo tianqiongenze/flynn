@@ -123,3 +123,10 @@ func CreateEvent(dbExec func(string, ...interface{}) error, e *ct.Event, data in
 	query += ")"
 	return dbExec(query, args...)
 }
+
+func split(s string, sep string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, ",")
+}

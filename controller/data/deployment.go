@@ -27,6 +27,30 @@ func NewDeploymentRepo(db *postgres.DB, appRepo *AppRepo, releaseRepo *ReleaseRe
 }
 
 func (r *DeploymentRepo) Add(appID, releaseID string) (*ct.Deployment, error) {
+	ed, err := r.AddExpanded(appID, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	var oldReleaseID string
+	if ed.OldRelease != nil {
+		oldReleaseID = ed.OldRelease.ID
+	}
+	return &ct.Deployment{
+		ID:            ed.ID,
+		AppID:         ed.AppID,
+		OldReleaseID:  oldReleaseID,
+		NewReleaseID:  ed.NewRelease.ID,
+		Strategy:      ed.Strategy,
+		Status:        ed.Status,
+		Processes:     ed.Processes,
+		Tags:          ed.Tags,
+		DeployTimeout: ed.DeployTimeout,
+		CreatedAt:     ed.CreatedAt,
+		FinishedAt:    ed.FinishedAt,
+	}, nil
+}
+
+func (r *DeploymentRepo) AddExpanded(appID, releaseID string) (*ct.ExpandedDeployment, error) {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return nil, err
@@ -56,19 +80,18 @@ func (r *DeploymentRepo) Add(appID, releaseID string) (*ct.Deployment, error) {
 
 	oldRelease, err := r.appRepo.TxGetRelease(tx, app.ID)
 	if err == ErrNotFound {
-		oldRelease = &ct.Release{}
+		oldRelease = nil
 	} else if err != nil {
 		tx.Rollback()
 		return nil, err
 	}
-	var oldFormation *ct.Formation
-	if oldRelease.ID == "" {
-		oldFormation = &ct.Formation{}
-	} else {
-		oldFormation, err = r.formationRepo.TxGet(tx, app.ID, oldRelease.ID)
-		if err == ErrNotFound {
-			oldFormation = &ct.Formation{}
-		} else if err != nil {
+
+	oldFormation := &ct.Formation{}
+	if oldRelease != nil {
+		f, err := r.formationRepo.TxGet(tx, app.ID, oldRelease.ID)
+		if err == nil {
+			oldFormation = f
+		} else if err != ErrNotFound {
 			tx.Rollback()
 			return nil, err
 		}
@@ -78,14 +101,26 @@ func (r *DeploymentRepo) Add(appID, releaseID string) (*ct.Deployment, error) {
 		procCount += i
 	}
 
+	ed := &ct.ExpandedDeployment{
+		AppID:         app.ID,
+		NewRelease:    release,
+		Strategy:      app.Strategy,
+		OldRelease:    oldRelease,
+		Processes:     oldFormation.Processes,
+		Tags:          oldFormation.Tags,
+		DeployTimeout: app.DeployTimeout,
+	}
+
 	d := &ct.Deployment{
 		AppID:         app.ID,
 		NewReleaseID:  release.ID,
 		Strategy:      app.Strategy,
-		OldReleaseID:  oldRelease.ID,
 		Processes:     oldFormation.Processes,
 		Tags:          oldFormation.Tags,
 		DeployTimeout: app.DeployTimeout,
+	}
+	if oldRelease != nil {
+		d.OldReleaseID = oldRelease.ID
 	}
 
 	if err := schema.Validate(d); err != nil {
@@ -98,21 +133,24 @@ func (r *DeploymentRepo) Add(appID, releaseID string) (*ct.Deployment, error) {
 			tx.Rollback()
 			return nil, err
 		}
-		now := time.Now()
+		now := time.Now().Truncate(time.Microsecond) // postgres only has microsecond precision
 		d.FinishedAt = &now
+		ed.FinishedAt = &now
 	}
 
+	var oldReleaseID *string
+	if oldRelease != nil {
+		oldReleaseID = &oldRelease.ID
+	}
 	if d.ID == "" {
 		d.ID = random.UUID()
 	}
-	var oldReleaseID *string
-	if d.OldReleaseID != "" {
-		oldReleaseID = &d.OldReleaseID
-	}
+	ed.ID = d.ID
 	if err := tx.QueryRow("deployment_insert", d.ID, d.AppID, oldReleaseID, d.NewReleaseID, d.Strategy, d.Processes, d.Tags, d.DeployTimeout).Scan(&d.CreatedAt); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
+	ed.CreatedAt = d.CreatedAt
 
 	// fake initial deployment
 	if d.FinishedAt != nil {
@@ -124,8 +162,8 @@ func (r *DeploymentRepo) Add(appID, releaseID string) (*ct.Deployment, error) {
 			tx.Rollback()
 			return nil, err
 		}
-		d.Status = "complete"
-		return d, tx.Commit()
+		ed.Status = "complete"
+		return ed, tx.Commit()
 	}
 
 	args, err := json.Marshal(ct.DeployID{ID: d.ID})
@@ -138,14 +176,14 @@ func (r *DeploymentRepo) Add(appID, releaseID string) (*ct.Deployment, error) {
 		tx.Rollback()
 		return nil, err
 	}
-	d.Status = "pending"
+	ed.Status = "pending"
 
 	job := &que.Job{Type: "deployment", Args: args}
 	if err := r.q.EnqueueInTx(job, tx.Tx); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
-	return d, tx.Commit()
+	return ed, tx.Commit()
 }
 
 func (r *DeploymentRepo) Get(id string) (*ct.Deployment, error) {
@@ -168,6 +206,70 @@ func (r *DeploymentRepo) List(appID string) ([]*ct.Deployment, error) {
 		deployments = append(deployments, deployment)
 	}
 	return deployments, rows.Err()
+}
+
+type ListDeploymentOptions struct {
+	PageToken     *PageToken
+	AppIDs        []string
+	DeploymentIDs []string
+}
+
+func (r *DeploymentRepo) ListExpanded(opts ListDeploymentOptions) ([]*ct.ExpandedDeployment, error) {
+	var pageSize int
+	if opts.PageToken != nil && opts.PageToken.Size > 0 {
+		pageSize = opts.PageToken.Size
+	} else {
+		pageSize = DEFAULT_PAGE_SIZE
+	}
+	rows, err := r.db.Query("deployment_list_all_expanded", opts.AppIDs, opts.DeploymentIDs, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	var deployments []*ct.ExpandedDeployment
+	for rows.Next() {
+		deployment, err := scanExpandedDeployment(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		deployments = append(deployments, deployment)
+	}
+	return deployments, rows.Err()
+}
+
+func scanExpandedDeployment(s postgres.Scanner) (*ct.ExpandedDeployment, error) {
+	d := &ct.ExpandedDeployment{}
+	oldRelease := &ct.Release{}
+	newRelease := &ct.Release{}
+	var oldArtifactIDs string
+	var newArtifactIDs string
+	var oldReleaseID *string
+	var status *string
+	err := s.Scan(
+		&d.ID, &d.AppID, &oldReleaseID, &newRelease.ID, &d.Strategy, &status, &d.Processes, &d.Tags, &d.DeployTimeout, &d.CreatedAt, &d.FinishedAt,
+		&oldArtifactIDs, &oldRelease.Env, &oldRelease.Processes, &oldRelease.Meta, &oldRelease.CreatedAt,
+		&newArtifactIDs, &newRelease.Env, &newRelease.Processes, &newRelease.Meta, &newRelease.CreatedAt,
+	)
+	if err == pgx.ErrNoRows {
+		err = ErrNotFound
+	}
+	if oldReleaseID != nil {
+		oldRelease.ID = *oldReleaseID
+		oldRelease.AppID = d.AppID
+		if oldArtifactIDs != "" {
+			oldRelease.ArtifactIDs = splitArtifactIDs(oldArtifactIDs)
+		}
+		d.OldRelease = oldRelease
+	}
+	if newArtifactIDs != "" {
+		newRelease.ArtifactIDs = splitArtifactIDs(newArtifactIDs)
+	}
+	newRelease.AppID = d.AppID
+	d.NewRelease = newRelease
+	if status != nil {
+		d.Status = *status
+	}
+	return d, err
 }
 
 func scanDeployment(s postgres.Scanner) (*ct.Deployment, error) {

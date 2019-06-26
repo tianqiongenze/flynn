@@ -370,6 +370,20 @@ type Deployment struct {
 	FinishedAt    *time.Time                   `json:"finished_at,omitempty"`
 }
 
+type ExpandedDeployment struct {
+	ID            string                       `json:"id,omitempty"`
+	AppID         string                       `json:"app,omitempty"`
+	OldRelease    *Release                     `json:"old_release,omitempty"`
+	NewRelease    *Release                     `json:"new_release,omitempty"`
+	Strategy      string                       `json:"strategy,omitempty"`
+	Status        string                       `json:"status,omitempty"`
+	Processes     map[string]int               `json:"processes,omitempty"`
+	Tags          map[string]map[string]string `json:"tags,omitempty"`
+	DeployTimeout int32                        `json:"deploy_timeout,omitempty"`
+	CreatedAt     *time.Time                   `json:"created_at,omitempty"`
+	FinishedAt    *time.Time                   `json:"finished_at,omitempty"`
+}
+
 type DeployID struct {
 	ID string
 }
