@@ -213,6 +213,13 @@ func (s *S) createTestArtifact(c *C, in *ct.Artifact) *ct.Artifact {
 	return in
 }
 
+func (s *S) createTestScaleRequest(c *C, req *protobuf.CreateScaleRequest) *protobuf.ScaleRequest {
+	ctReq := utils.BackConvertCreateScaleRequest(req)
+	ctReq, err := s.conf.formationRepo.AddScaleRequest(ctReq, false)
+	c.Assert(err, IsNil)
+	return utils.ConvertScaleRequest(ctReq)
+}
+
 func (s *S) TestOptionsRequest(c *C) { // grpc-web
 	req, err := http.NewRequest("OPTIONS", "http://localhost/grpc-web/fake", nil)
 	c.Assert(err, IsNil)
@@ -775,65 +782,96 @@ func (s *S) TestStreamReleases(c *C) {
 }
 
 func (s *S) TestStreamScales(c *C) {
-	// test fetching the latest scale request
+	testApp1 := s.createTestApp(c, &protobuf.App{DisplayName: "test1"})
+	testApp2 := s.createTestApp(c, &protobuf.App{DisplayName: "test2"})
+	testApp3 := s.createTestApp(c, &protobuf.App{DisplayName: "test3"})
+	testRelease1 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Labels: map[string]string{"i": "1"}, Processes: map[string]*protobuf.ProcessType{"devnull": &protobuf.ProcessType{Args: []string{"tail", "-f", "/dev/null"}, Service: "dev"}}})
+	testRelease2 := s.createTestRelease(c, testApp2.Name, &protobuf.Release{Labels: map[string]string{"i": "2"}, Processes: map[string]*protobuf.ProcessType{"devnull": &protobuf.ProcessType{Args: []string{"tail", "-f", "/dev/null"}, Service: "dev"}}})
+	testRelease3 := s.createTestRelease(c, testApp2.Name, &protobuf.Release{Labels: map[string]string{"i": "3"}, Processes: map[string]*protobuf.ProcessType{"devnull": &protobuf.ProcessType{Args: []string{"tail", "-f", "/dev/null"}, Service: "dev"}}})
+	testRelease4 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Labels: map[string]string{"i": "4"}, Processes: map[string]*protobuf.ProcessType{"devnull": &protobuf.ProcessType{Args: []string{"tail", "-f", "/dev/null"}, Service: "dev"}}})
+	testRelease5 := s.createTestRelease(c, testApp3.Name, &protobuf.Release{Labels: map[string]string{"i": "5"}, Processes: map[string]*protobuf.ProcessType{"devnull": &protobuf.ProcessType{Args: []string{"tail", "-f", "/dev/null"}, Service: "dev"}}})
+	testRelease6 := s.createTestRelease(c, testApp3.Name, &protobuf.Release{Labels: map[string]string{"i": "6"}, Processes: map[string]*protobuf.ProcessType{"devnull": &protobuf.ProcessType{Args: []string{"tail", "-f", "/dev/null"}, Service: "dev"}}})
+	testScale1 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease1.Name, Processes: map[string]int32{"devnull": 1}})
+	testScale2 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease2.Name, Processes: map[string]int32{"devnull": 1}})
+	testScale3 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease3.Name, Processes: map[string]int32{"devnull": 2}})
+	testScale4 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease4.Name, Processes: map[string]int32{"devnull": 2}})
+	testScale5 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease5.Name, Processes: map[string]int32{"devnull": 1}})
+	testScale6 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease6.Name, Processes: map[string]int32{"devnull": 2}})
 
-	// test fetching a single scale request by name
+	fmt.Println(testScale1.Name)
+	fmt.Println(testScale2.Name)
+	fmt.Println(testScale3.Name)
+	fmt.Println(testScale4.Name)
+	fmt.Println(testScale5.Name)
+	fmt.Println(testScale6.Name)
 
-	// test fetching a single scale request by app name
+	unaryReceiveScales := func(req *protobuf.StreamScalesRequest) (res *protobuf.StreamScalesResponse, receivedEOF bool) {
+		ctx, ctxCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer func() {
+			if !receivedEOF {
+				ctxCancel()
+			}
+		}()
+		stream, err := s.grpc.StreamScales(ctx, req)
+		c.Assert(err, IsNil)
+		for i := 0; i < 2; i++ {
+			r, err := stream.Recv()
+			if err == io.EOF {
+				receivedEOF = true
+				return
+			}
+			if isErrCanceled(err) {
+				return
+			}
+			c.Assert(err, IsNil)
+			res = r
+		}
+		return
+	}
 
-	// test fetching multiple scale requests by name
+	// test fetching the latest scale
+	res, receivedEOF := unaryReceiveScales(&protobuf.StreamScalesRequest{PageSize: 1})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 1)
+	c.Assert(res.ScaleRequests[0].Name, Equals, testScale6.Name)
+	c.Assert(receivedEOF, Equals, true)
 
-	// test fetching multiple scale requests by app name
+	// test fetching a single scale by name
+	res, receivedEOF = unaryReceiveScales(&protobuf.StreamScalesRequest{NameFilters: []string{testScale5.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 1)
+	c.Assert(res.ScaleRequests[0].Name, Equals, testScale5.Name)
+	c.Assert(receivedEOF, Equals, true)
 
-	// test fetching multiple scale requests by a mixture of app name and scale request name
+	// test fetching a single scale by release name
+	res, receivedEOF = unaryReceiveScales(&protobuf.StreamScalesRequest{PageSize: 1, NameFilters: []string{testRelease3.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 1)
+	c.Assert(res.ScaleRequests[0].Name, Equals, testScale3.Name)
+	c.Assert(receivedEOF, Equals, true)
 
-	// test filtering by labels [OP_IN]
+	// test fetching a single scale by app name
+	res, receivedEOF = unaryReceiveScales(&protobuf.StreamScalesRequest{PageSize: 1, NameFilters: []string{testApp2.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 1)
+	c.Assert(res.ScaleRequests[0].Name, Equals, testScale3.Name)
+	c.Assert(receivedEOF, Equals, true)
 
-	// test filtering by labels [OP_NOT_IN]
+	// test fetching multiple scales by release name
 
-	// test filtering by labels [OP_EXISTS]
+	// test fetching multiple scales by app name
 
-	// test filtering by labels [OP_NOT_EXISTS]
+	// test fetching multiple scales by a mixture of app name and release name
 
-	// test streaming creates for specific app
+	// test streaming creates for specific release
 
 	// test creates are not streamed when flag not set
 
-	// test streaming creates that don't match the LabelFilters [OP_EXISTS]
-
 	// test streaming creates that don't match the NameFilters
 
-	// test unary pagination
-}
+	// test streaming updates (new scale for the app/release)
 
-func (s *S) TestStreamFormations(c *C) {
-	// test fetching the latest formation
-
-	// test fetching a single formation by name
-
-	// test fetching a single formation by app name
-
-	// test fetching multiple formations by name
-
-	// test fetching multiple formations by app name
-
-	// test fetching multiple formations by a mixture of app name and formation name
-
-	// test filtering by labels [OP_IN]
-
-	// test filtering by labels [OP_NOT_IN]
-
-	// test filtering by labels [OP_EXISTS]
-
-	// test filtering by labels [OP_NOT_EXISTS]
-
-	// test streaming creates for specific app
-
-	// test creates are not streamed when flag not set
-
-	// test streaming creates that don't match the LabelFilters [OP_EXISTS]
-
-	// test streaming creates that don't match the NameFilters
+	// test streaming updates that don't match the NameFilters
 
 	// test unary pagination
 }

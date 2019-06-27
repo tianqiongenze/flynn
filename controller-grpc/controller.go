@@ -550,7 +550,20 @@ func (s *server) CreateScale(ctx context.Context, req *protobuf.CreateScaleReque
 }
 
 func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf.Controller_StreamScalesServer) error {
-	appIDs := utils.ParseAppIDsFromNameFilters(req.NameFilters)
+	unary := !(req.StreamUpdates || req.StreamCreates)
+
+	pageSize := int(req.PageSize)
+	pageToken, err := data.ParsePageToken(req.PageToken)
+	if err != nil {
+		// TODO(jvatic): return proper error code
+		return err
+	}
+
+	if pageSize > 0 {
+		pageToken.Size = pageSize
+	} else {
+		pageSize = pageToken.Size
+	}
 
 	var scaleRequests []*protobuf.ScaleRequest
 	var scaleRequestsMtx sync.RWMutex
@@ -613,7 +626,11 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 		return nil
 	}
 
-	sub, err := s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeScaleRequest}, nil)
+	appIDs := utils.ParseIDsFromNameFilters(req.NameFilters, "apps")
+	releaseIDs := utils.ParseIDsFromNameFilters(req.NameFilters, "releases")
+	scaleIDs := utils.ParseIDsFromNameFilters(req.NameFilters, "scales")
+
+	sub, err := s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeScaleRequest}, scaleIDs)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
@@ -622,7 +639,14 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 
 	// get all events up until now
 	var currID int64
-	list, err := s.eventRepo.ListEvents(appIDs, []string{string(ct.EventTypeScaleRequest)}, nil, nil, nil, 0)
+	listEventsOptions := []data.ListEventsOption{
+		data.ListEventsOptionAppIDs(appIDs),
+		data.ListEventsOptionObjectTypes([]string{string(ct.EventTypeScaleRequest)}),
+		data.ListEventsOptionObjectIDs(scaleIDs),
+		data.ListEventsOptionObjectField("release", releaseIDs),
+		data.ListEventsOptionCount(pageSize),
+	}
+	list, err := s.eventRepo.ListEvents(listEventsOptions...)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
@@ -638,6 +662,10 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 		}
 	}
 	sendResponse()
+
+	if unary {
+		return nil
+	}
 
 	// stream new events as they are created
 	var wg sync.WaitGroup
@@ -790,7 +818,7 @@ func (s *server) StreamReleases(req *protobuf.StreamReleasesRequest, stream prot
 	if count > 0 {
 		count = count + 1 // request 1 more than what we need to see if there's a next page
 	}
-	list, err := s.eventRepo.ListEvents(eventAppIDs, []string{string(ct.EventTypeRelease)}, nil, pageToken.BeforeIDInt64(), nil, count)
+	list, err := s.eventRepo.LegacyListEvents(eventAppIDs, []string{string(ct.EventTypeRelease)}, nil, pageToken.BeforeIDInt64(), nil, count)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
