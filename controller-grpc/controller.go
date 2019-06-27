@@ -1026,10 +1026,8 @@ func (s *server) listDeployments(req *protobuf.StreamDeploymentsRequest) ([]*pro
 func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, stream protobuf.Controller_StreamDeploymentsServer) error {
 	unary := !(req.StreamUpdates || req.StreamCreates)
 
-	appIDs := utils.ParseAppIDsFromNameFilters(req.NameFilters)
-	if len(appIDs) == 0 {
-		appIDs = nil
-	}
+	appIDs := utils.ParseIDsFromNameFilters(req.NameFilters, "apps")
+	deploymentIDs := utils.ParseIDsFromNameFilters(req.NameFilters, "deployments")
 
 	var deploymentsMtx sync.RWMutex
 	var deployments []*protobuf.ExpandedDeployment
@@ -1064,7 +1062,7 @@ func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, strea
 
 	var wg sync.WaitGroup
 
-	sub, err := s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeDeployment}, nil)
+	sub, err := s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeDeployment}, deploymentIDs)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
@@ -1080,6 +1078,12 @@ func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, strea
 			if !ok {
 				break
 			}
+
+			if !((req.StreamCreates && ctEvent.Op == ct.EventOpCreate) || (req.StreamUpdates && ctEvent.Op == ct.EventOpUpdate)) {
+				// EventOp doesn't match the stream type
+				continue
+			}
+
 			var deploymentEvent *ct.DeploymentEvent
 			if err := json.Unmarshal(ctEvent.Data, &deploymentEvent); err != nil {
 				// TODO(jvatic): handle error

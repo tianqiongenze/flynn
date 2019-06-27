@@ -186,6 +186,19 @@ func (s *S) createTestDeployment(c *C, releaseName string) *protobuf.ExpandedDep
 	return utils.ConvertExpandedDeployment(ctDeployment)
 }
 
+func (s *S) createTestDeploymentEvent(c *C, d *protobuf.ExpandedDeployment, e *ct.DeploymentEvent) {
+	e.AppID = utils.ParseIDFromName(d.Name, "apps")
+	e.DeploymentID = utils.ParseIDFromName(d.Name, "deployments")
+	e.ReleaseID = utils.ParseIDFromName(d.NewRelease.Name, "releases")
+
+	c.Assert(data.CreateEvent(s.conf.DB.Exec, &ct.Event{
+		AppID:      e.AppID,
+		ObjectID:   e.DeploymentID,
+		ObjectType: ct.EventTypeDeployment,
+		Op:         ct.EventOpUpdate,
+	}, e), IsNil)
+}
+
 func (s *S) createTestArtifact(c *C, in *ct.Artifact) *ct.Artifact {
 	if in.Type == "" {
 		in.Type = ct.ArtifactTypeFlynn
@@ -886,7 +899,10 @@ func (s *S) TestStreamDeployments(c *C) {
 	}
 
 	assertDeploymentsEqual := func(c *C, a, b *protobuf.ExpandedDeployment) {
-		comment := Commentf("Obtained %#v", b)
+		comment := Commentf("Obtained %#v", a)
+		if a != nil {
+			comment = Commentf("Obtained %T{NewRelease: %#v ...}", a, a.NewRelease)
+		}
 		c.Assert(a.Name, DeepEquals, b.Name, comment)
 		c.Assert(a.OldRelease, DeepEquals, b.OldRelease, comment)
 		c.Assert(a.NewRelease, DeepEquals, b.NewRelease, comment)
@@ -1023,15 +1039,54 @@ func (s *S) TestStreamDeployments(c *C) {
 	assertDeploymentsEqual(c, res.Deployments[0], testDeployment10)
 	cancel()
 
+	// test streaming updates
+	stream, cancel = streamDeploymentsWithCancel(&protobuf.StreamDeploymentsRequest{StreamUpdates: true})
+	receiveDeploymentsStream(stream) // initial page
+	testRelease11 := s.createTestRelease(c, testApp3.Name, &protobuf.Release{Labels: map[string]string{"i": "11"}})
+	testDeployment11 := s.createTestDeployment(c, testRelease11.Name) // make sure creates aren't streamed
+	testDeployment10.Status = protobuf.DeploymentStatus_PENDING
+	s.createTestDeploymentEvent(c, testDeployment10, &ct.DeploymentEvent{Status: "pending"})
+	res = receiveDeploymentsStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 1)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment10)
+	cancel()
+
+	// test streaming updates respects NameFilters [app name]
+	stream, cancel = streamDeploymentsWithCancel(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testApp2.Name}, StreamUpdates: true})
+	receiveDeploymentsStream(stream) // initial page
+	testDeployment10.Status = protobuf.DeploymentStatus_COMPLETE
+	s.createTestDeploymentEvent(c, testDeployment10, &ct.DeploymentEvent{Status: "complete"})
+	testDeployment6.Status = protobuf.DeploymentStatus_PENDING
+	s.createTestDeploymentEvent(c, testDeployment6, &ct.DeploymentEvent{Status: "pending"})
+	res = receiveDeploymentsStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 1)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment6)
+	cancel()
+
+	// test streaming updates respects NameFilters [deployment name]
+	stream, cancel = streamDeploymentsWithCancel(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testDeployment5.Name}, StreamUpdates: true})
+	receiveDeploymentsStream(stream) // initial page
+	testDeployment6.Status = protobuf.DeploymentStatus_COMPLETE
+	s.createTestDeploymentEvent(c, testDeployment6, &ct.DeploymentEvent{Status: "complete"})
+	testDeployment5.Status = protobuf.DeploymentStatus_PENDING
+	s.createTestDeploymentEvent(c, testDeployment5, &ct.DeploymentEvent{Status: "pending"})
+	res = receiveDeploymentsStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 1)
+	assertDeploymentsEqual(c, res.Deployments[0], testDeployment5)
+	cancel()
+
 	// test unary pagination
 	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 1})
 	c.Assert(res, Not(IsNil))
 	c.Assert(len(res.Deployments), Equals, 1)
-	c.Assert(res.Deployments[0], DeepEquals, testDeployment10)
+	c.Assert(res.Deployments[0], DeepEquals, testDeployment11)
 	c.Assert(receivedEOF, Equals, true)
 	c.Assert(res.NextPageToken, Not(Equals), "")
 	c.Assert(res.PageComplete, Equals, true)
-	for i, testDeployment := range []*protobuf.ExpandedDeployment{testDeployment9, testDeployment8, testDeployment7, testDeployment6, testDeployment5, testDeployment4, testDeployment3} {
+	for i, testDeployment := range []*protobuf.ExpandedDeployment{testDeployment10, testDeployment9, testDeployment8, testDeployment7, testDeployment6, testDeployment5, testDeployment4, testDeployment3} {
 		comment := Commentf("iteraction %d", i)
 		res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 1, PageToken: res.NextPageToken})
 		c.Assert(res, Not(IsNil), comment)
