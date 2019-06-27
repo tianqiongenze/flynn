@@ -12,7 +12,6 @@ service Controller {
   rpc StreamApps (StreamAppsRequest) returns (stream StreamAppsResponse) {};
   rpc StreamReleases(StreamReleasesRequest) returns (stream StreamReleasesResponse) {};
   rpc StreamScales (StreamScalesRequest) returns (stream StreamScalesResponse) {};
-  rpc StreamFormations(StreamFormationsRequest) returns (stream StreamFormationsResponse) {};
   rpc StreamDeployments(StreamDeploymentsRequest) returns (stream StreamDeploymentsResponse) {};
 
   // write API
@@ -155,42 +154,6 @@ message StreamScalesRequest {
 
 message StreamScalesResponse {
   repeated ScaleRequest scale_requests = 1;
-
-  // Set to true on the last response for the initial page.
-  bool page_complete = 2;
-
-  string next_page_token = 3;
-}
-
-message StreamFormationsRequest {
-  // The maximum number of resources to return in the initial page.
-  int32 page_size = 1;
-
-  // Used for pagination. Must be a next_page_token returned from a previous response.
-  string page_token = 2;
-
-  // Specifies an optional list of parent resource names that resources should
-  // be looked up by. The list length must be smaller than page_size. This can
-  // be used to request a known set of one or more resources and optionally
-  // receive updates about them, and can also be used to retrieve a single
-  // resource.
-  repeated string name_filters = 3;
-
-  // filters are ORed
-  repeated LabelFilter label_filters = 4;
-
-  // When true, leaves the stream open and sends any updates to each resource
-  // returned in the initial page until the stream is closed.
-  bool stream_updates = 5;
-
-  // When true, leaves the stream open and sends newly created resources
-  // matching the filters until the stream is closed. page_token must not be
-  // set.
-  bool stream_creates = 6;
-}
-
-message StreamFormationsResponse {
-  repeated Formation formations = 1;
 
   // Set to true on the last response for the initial page.
   bool page_complete = 2;
@@ -434,20 +397,6 @@ message ScaleRequest {
   map<string, DeploymentProcessTags> new_tags = 7;
   google.protobuf.Timestamp create_time = 8;
   google.protobuf.Timestamp update_time = 9;
-}
-
-message Formation {
-  // parent = "apps/APP_ID/releases/RELEASE_ID"
-  string parent = 1;
-  // scale_request = "apps/APP_ID/releases/RELEASE_ID/scale/SCALE_REQUEST_ID"
-  string scale_request = 2;
-  ScaleRequestState state = 3;
-  map<string, int32> processes = 4;
-  // profobuf doesn't support maps within maps, so map[string]map[string]string
-  // could not be reproduced
-  map<string, DeploymentProcessTags> tags = 5;
-  google.protobuf.Timestamp create_time = 6;
-  google.protobuf.Timestamp update_time = 7;
 }
 
 enum DeploymentStatus {

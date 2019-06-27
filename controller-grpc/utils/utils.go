@@ -204,16 +204,6 @@ func ConvertScaleRequest(ctScaleReq *ct.ScaleRequest) *protobuf.ScaleRequest {
 	}
 }
 
-func ConvertFormation(ctFormation *ct.Formation) *protobuf.Formation {
-	return &protobuf.Formation{
-		Parent:     fmt.Sprintf("apps/%s/releases/%s", ctFormation.AppID, ctFormation.ReleaseID),
-		Processes:  ConvertDeploymentProcesses(ctFormation.Processes),
-		Tags:       ConvertDeploymentTags(ctFormation.Tags),
-		CreateTime: TimestampProto(ctFormation.CreatedAt),
-		UpdateTime: TimestampProto(ctFormation.UpdatedAt),
-	}
-}
-
 func ConvertError(err error, message string, args ...interface{}) error {
 	errCode := codes.Unknown
 	if err == controller.ErrNotFound {

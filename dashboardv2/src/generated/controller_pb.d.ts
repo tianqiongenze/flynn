@@ -290,80 +290,6 @@ export namespace StreamScalesResponse {
   }
 }
 
-export class StreamFormationsRequest extends jspb.Message {
-  getPageSize(): number;
-  setPageSize(value: number): void;
-
-  getPageToken(): string;
-  setPageToken(value: string): void;
-
-  clearNameFiltersList(): void;
-  getNameFiltersList(): Array<string>;
-  setNameFiltersList(value: Array<string>): void;
-  addNameFilters(value: string, index?: number): string;
-
-  clearLabelFiltersList(): void;
-  getLabelFiltersList(): Array<LabelFilter>;
-  setLabelFiltersList(value: Array<LabelFilter>): void;
-  addLabelFilters(value?: LabelFilter, index?: number): LabelFilter;
-
-  getStreamUpdates(): boolean;
-  setStreamUpdates(value: boolean): void;
-
-  getStreamCreates(): boolean;
-  setStreamCreates(value: boolean): void;
-
-  serializeBinary(): Uint8Array;
-  toObject(includeInstance?: boolean): StreamFormationsRequest.AsObject;
-  static toObject(includeInstance: boolean, msg: StreamFormationsRequest): StreamFormationsRequest.AsObject;
-  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
-  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
-  static serializeBinaryToWriter(message: StreamFormationsRequest, writer: jspb.BinaryWriter): void;
-  static deserializeBinary(bytes: Uint8Array): StreamFormationsRequest;
-  static deserializeBinaryFromReader(message: StreamFormationsRequest, reader: jspb.BinaryReader): StreamFormationsRequest;
-}
-
-export namespace StreamFormationsRequest {
-  export type AsObject = {
-    pageSize: number,
-    pageToken: string,
-    nameFiltersList: Array<string>,
-    labelFiltersList: Array<LabelFilter.AsObject>,
-    streamUpdates: boolean,
-    streamCreates: boolean,
-  }
-}
-
-export class StreamFormationsResponse extends jspb.Message {
-  clearFormationsList(): void;
-  getFormationsList(): Array<Formation>;
-  setFormationsList(value: Array<Formation>): void;
-  addFormations(value?: Formation, index?: number): Formation;
-
-  getPageComplete(): boolean;
-  setPageComplete(value: boolean): void;
-
-  getNextPageToken(): string;
-  setNextPageToken(value: string): void;
-
-  serializeBinary(): Uint8Array;
-  toObject(includeInstance?: boolean): StreamFormationsResponse.AsObject;
-  static toObject(includeInstance: boolean, msg: StreamFormationsResponse): StreamFormationsResponse.AsObject;
-  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
-  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
-  static serializeBinaryToWriter(message: StreamFormationsResponse, writer: jspb.BinaryWriter): void;
-  static deserializeBinary(bytes: Uint8Array): StreamFormationsResponse;
-  static deserializeBinaryFromReader(message: StreamFormationsResponse, reader: jspb.BinaryReader): StreamFormationsResponse;
-}
-
-export namespace StreamFormationsResponse {
-  export type AsObject = {
-    formationsList: Array<Formation.AsObject>,
-    pageComplete: boolean,
-    nextPageToken: string,
-  }
-}
-
 export class StreamDeploymentsRequest extends jspb.Message {
   getPageSize(): number;
   setPageSize(value: number): void;
@@ -1055,52 +981,6 @@ export namespace ScaleRequest {
     newProcessesMap: Array<[string, number]>,
     oldTagsMap: Array<[string, DeploymentProcessTags.AsObject]>,
     newTagsMap: Array<[string, DeploymentProcessTags.AsObject]>,
-    createTime?: google_protobuf_timestamp_pb.Timestamp.AsObject,
-    updateTime?: google_protobuf_timestamp_pb.Timestamp.AsObject,
-  }
-}
-
-export class Formation extends jspb.Message {
-  getParent(): string;
-  setParent(value: string): void;
-
-  getScaleRequest(): string;
-  setScaleRequest(value: string): void;
-
-  getState(): ScaleRequestStateMap[keyof ScaleRequestStateMap];
-  setState(value: ScaleRequestStateMap[keyof ScaleRequestStateMap]): void;
-
-  getProcessesMap(): jspb.Map<string, number>;
-  clearProcessesMap(): void;
-  getTagsMap(): jspb.Map<string, DeploymentProcessTags>;
-  clearTagsMap(): void;
-  hasCreateTime(): boolean;
-  clearCreateTime(): void;
-  getCreateTime(): google_protobuf_timestamp_pb.Timestamp | undefined;
-  setCreateTime(value?: google_protobuf_timestamp_pb.Timestamp): void;
-
-  hasUpdateTime(): boolean;
-  clearUpdateTime(): void;
-  getUpdateTime(): google_protobuf_timestamp_pb.Timestamp | undefined;
-  setUpdateTime(value?: google_protobuf_timestamp_pb.Timestamp): void;
-
-  serializeBinary(): Uint8Array;
-  toObject(includeInstance?: boolean): Formation.AsObject;
-  static toObject(includeInstance: boolean, msg: Formation): Formation.AsObject;
-  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
-  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
-  static serializeBinaryToWriter(message: Formation, writer: jspb.BinaryWriter): void;
-  static deserializeBinary(bytes: Uint8Array): Formation;
-  static deserializeBinaryFromReader(message: Formation, reader: jspb.BinaryReader): Formation;
-}
-
-export namespace Formation {
-  export type AsObject = {
-    parent: string,
-    scaleRequest: string,
-    state: ScaleRequestStateMap[keyof ScaleRequestStateMap],
-    processesMap: Array<[string, number]>,
-    tagsMap: Array<[string, DeploymentProcessTags.AsObject]>,
     createTime?: google_protobuf_timestamp_pb.Timestamp.AsObject,
     updateTime?: google_protobuf_timestamp_pb.Timestamp.AsObject,
   }

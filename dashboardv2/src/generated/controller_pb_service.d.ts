@@ -31,15 +31,6 @@ type ControllerStreamScales = {
   readonly responseType: typeof controller_pb.StreamScalesResponse;
 };
 
-type ControllerStreamFormations = {
-  readonly methodName: string;
-  readonly service: typeof Controller;
-  readonly requestStream: false;
-  readonly responseStream: true;
-  readonly requestType: typeof controller_pb.StreamFormationsRequest;
-  readonly responseType: typeof controller_pb.StreamFormationsResponse;
-};
-
 type ControllerStreamDeployments = {
   readonly methodName: string;
   readonly service: typeof Controller;
@@ -90,7 +81,6 @@ export class Controller {
   static readonly StreamApps: ControllerStreamApps;
   static readonly StreamReleases: ControllerStreamReleases;
   static readonly StreamScales: ControllerStreamScales;
-  static readonly StreamFormations: ControllerStreamFormations;
   static readonly StreamDeployments: ControllerStreamDeployments;
   static readonly UpdateApp: ControllerUpdateApp;
   static readonly CreateScale: ControllerCreateScale;
@@ -133,7 +123,6 @@ export class ControllerClient {
   streamApps(requestMessage: controller_pb.StreamAppsRequest, metadata?: grpc.Metadata): ResponseStream<controller_pb.StreamAppsResponse>;
   streamReleases(requestMessage: controller_pb.StreamReleasesRequest, metadata?: grpc.Metadata): ResponseStream<controller_pb.StreamReleasesResponse>;
   streamScales(requestMessage: controller_pb.StreamScalesRequest, metadata?: grpc.Metadata): ResponseStream<controller_pb.StreamScalesResponse>;
-  streamFormations(requestMessage: controller_pb.StreamFormationsRequest, metadata?: grpc.Metadata): ResponseStream<controller_pb.StreamFormationsResponse>;
   streamDeployments(requestMessage: controller_pb.StreamDeploymentsRequest, metadata?: grpc.Metadata): ResponseStream<controller_pb.StreamDeploymentsResponse>;
   updateApp(
     requestMessage: controller_pb.UpdateAppRequest,
