@@ -130,6 +130,15 @@ func (s *S) TearDownSuite(c *C) {
 	}
 }
 
+func (s *S) SetUpTest(c *C) {
+	c.Assert(s.conf.DB.Exec(`
+		TRUNCATE
+			apps, artifacts, deployments, events,
+			formations, releases, scale_requests
+		CASCADE
+	`), IsNil)
+}
+
 func isErrCanceled(err error) bool {
 	if s, ok := status.FromError(err); ok {
 		if s.Code() == codes.Canceled {
@@ -212,9 +221,9 @@ func (s *S) TestOptionsRequest(c *C) { // grpc-web
 }
 
 func (s *S) TestStreamApps(c *C) {
-	testApp1 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-1-1"})
-	testApp2 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-1-2", Labels: map[string]string{"test.labels-filter": "include"}})
-	testApp3 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-1-3", Labels: map[string]string{"test.labels-filter": "exclude"}})
+	testApp1 := s.createTestApp(c, &protobuf.App{DisplayName: "test1"})
+	testApp2 := s.createTestApp(c, &protobuf.App{DisplayName: "test2", Labels: map[string]string{"test.labels-filter": "include"}})
+	testApp3 := s.createTestApp(c, &protobuf.App{DisplayName: "test3", Labels: map[string]string{"test.labels-filter": "exclude"}})
 
 	unaryReceiveApps := func(req *protobuf.StreamAppsRequest) (res *protobuf.StreamAppsResponse, receivedEOF bool) {
 		ctx, ctxCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -373,7 +382,7 @@ func (s *S) TestStreamApps(c *C) {
 	res = receiveAppsStream(stream)
 	c.Assert(res, Not(IsNil))
 	c.Assert(res.Apps[0], DeepEquals, testApp1)
-	testApp4 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-1-4"}) // through in a create to test that the we get the update and not the create
+	testApp4 := s.createTestApp(c, &protobuf.App{DisplayName: "test4"}) // through in a create to test that the we get the update and not the create
 	testApp1.Labels = map[string]string{"test.one": "1"}
 	updatedTestApp1 := s.updateTestApp(c, testApp1)
 	c.Assert(updatedTestApp1.Labels, DeepEquals, testApp1.Labels)
@@ -404,8 +413,8 @@ func (s *S) TestStreamApps(c *C) {
 
 	// test streaming updates without filters
 	stream, cancel = streamAppsWithCancel(&protobuf.StreamAppsRequest{StreamUpdates: true})
-	receiveAppsStream(stream)                                                     // initial page
-	testApp5 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-1-5"}) // through in a create to test that the we get the update and not the create
+	receiveAppsStream(stream)                                           // initial page
+	testApp5 := s.createTestApp(c, &protobuf.App{DisplayName: "test5"}) // through in a create to test that the we get the update and not the create
 	testApp1.Labels = map[string]string{"test.two": "2"}
 	updatedTestApp1 = s.updateTestApp(c, testApp1)
 	c.Assert(updatedTestApp1.Labels, DeepEquals, testApp1.Labels)
@@ -420,7 +429,7 @@ func (s *S) TestStreamApps(c *C) {
 	receiveAppsStream(stream) // initial page
 	testApp1.Labels = map[string]string{"test.three": "3"}
 	updatedTestApp1 = s.updateTestApp(c, testApp1) // through in a update to test that we get the create and not the update
-	testApp6 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-1-6"})
+	testApp6 := s.createTestApp(c, &protobuf.App{DisplayName: "test6"})
 	res = receiveAppsStream(stream)
 	c.Assert(res, Not(IsNil))
 	c.Assert(len(res.Apps), Equals, 1)
@@ -432,7 +441,7 @@ func (s *S) TestStreamApps(c *C) {
 	receiveAppsStream(stream) // initial page
 	testApp1.Labels = map[string]string{"test.four": "4"}
 	updatedTestApp1 = s.updateTestApp(c, testApp1) // through in a update to test that we get the create and not the update
-	testApp7 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-1-7"})
+	testApp7 := s.createTestApp(c, &protobuf.App{DisplayName: "test7"})
 	res = receiveAppsStream(stream)
 	c.Assert(res, IsNil)
 	cancel()
@@ -451,7 +460,7 @@ func (s *S) TestStreamApps(c *C) {
 	receiveAppsStream(stream) // initial page
 	testApp1.Labels = map[string]string{"test.four": "5"}
 	updatedTestApp1 = s.updateTestApp(c, testApp1) // through in a update to test that we get the create and not the update
-	testApp8 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-1-8"})
+	testApp8 := s.createTestApp(c, &protobuf.App{DisplayName: "test8"})
 	res = receiveAppsStream(stream)
 	c.Assert(res, IsNil)
 	cancel()
@@ -485,10 +494,10 @@ func (s *S) TestStreamApps(c *C) {
 }
 
 func (s *S) TestStreamReleases(c *C) {
-	testApp1 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-2-1"})
-	testApp2 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-2-2"})
-	testApp3 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-2-3"})
-	testApp4 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-2-4"})
+	testApp1 := s.createTestApp(c, &protobuf.App{DisplayName: "test1"})
+	testApp2 := s.createTestApp(c, &protobuf.App{DisplayName: "test2"})
+	testApp3 := s.createTestApp(c, &protobuf.App{DisplayName: "test3"})
+	testApp4 := s.createTestApp(c, &protobuf.App{DisplayName: "test4"})
 	testRelease1 := s.createTestRelease(c, testApp2.Name, &protobuf.Release{Env: map[string]string{"ONE": "1"}, Labels: map[string]string{"test.int": "1"}})
 	testRelease2 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Env: map[string]string{"TWO": "2"}, Labels: map[string]string{"test.int": "2"}})
 	testRelease3 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Env: map[string]string{"THREE": "3"}, Labels: map[string]string{"test.string": "foo"}})
@@ -818,9 +827,9 @@ func (s *S) TestStreamFormations(c *C) {
 }
 
 func (s *S) TestStreamDeployments(c *C) {
-	testApp1 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-5-1"})
-	testApp2 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-5-2"})
-	testApp3 := s.createTestApp(c, &protobuf.App{DisplayName: "stream-test-5-3"})
+	testApp1 := s.createTestApp(c, &protobuf.App{DisplayName: "test1"})
+	testApp2 := s.createTestApp(c, &protobuf.App{DisplayName: "test2"})
+	testApp3 := s.createTestApp(c, &protobuf.App{DisplayName: "test3"})
 	testArtifact1 := s.createTestArtifact(c, &ct.Artifact{})
 	testArtifact2 := s.createTestArtifact(c, &ct.Artifact{})
 	testRelease1 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Labels: map[string]string{"i": "1"}, Artifacts: []string{testArtifact1.ID}})
