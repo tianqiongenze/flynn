@@ -46,6 +46,7 @@ var preparedStatements = map[string]string{
 	"deployment_delete":                     deploymentDeleteQuery,
 	"event_select":                          eventSelectQuery,
 	"event_insert":                          eventInsertQuery,
+	"event_insert_op":                       eventInsertOpQuery,
 	"event_insert_unique":                   eventInsertUniqueQuery,
 	"formation_list_by_app":                 formationListByAppQuery,
 	"formation_list_by_release":             formationListByReleaseQuery,
@@ -332,6 +333,9 @@ FROM events WHERE event_id = $1`
 	eventInsertQuery = `
 INSERT INTO events (app_id, object_id, object_type, data)
 VALUES ($1, $2, $3, $4)`
+	eventInsertOpQuery = `
+INSERT INTO events (app_id, object_id, object_type, data, op)
+VALUES ($1, $2, $3, $4, $5)`
 	eventInsertUniqueQuery = `
 INSERT INTO events (app_id, object_id, unique_id, object_type, data)
 VALUES ($1, $2, $3, $4, $5) ON CONFLICT (unique_id) DO NOTHING`
