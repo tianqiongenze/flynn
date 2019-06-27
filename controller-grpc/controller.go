@@ -175,7 +175,7 @@ func (e *EventListener) Close() {
 	}
 }
 
-func (c *Config) subscribeEvents(appIDs []string, objectTypes []ct.EventType, objectID string) (*EventListener, error) {
+func (c *Config) subscribeEvents(appIDs []string, objectTypes []ct.EventType, objectIDs []string) (*EventListener, error) {
 	dataEventListener, err := c.maybeStartEventListener()
 	if err != nil {
 		// TODO(jvatic): return proper error code
@@ -192,11 +192,12 @@ func (c *Config) subscribeEvents(appIDs []string, objectTypes []ct.EventType, ob
 	}
 
 	if len(appIDs) == 0 {
+		// an empty string matches all app ids
 		appIDs = []string{""}
 	}
 	subs := make([]*data.EventSubscriber, len(appIDs))
 	for i, appID := range appIDs {
-		sub, err := dataEventListener.Subscribe(appID, objectTypeStrings, objectID)
+		sub, err := dataEventListener.Subscribe(appID, objectTypeStrings, objectIDs)
 		if err != nil {
 			// TODO(jvatic): return proper error code
 			return nil, err
@@ -372,7 +373,7 @@ func (s *server) StreamApps(req *protobuf.StreamAppsRequest, stream protobuf.Con
 	var err error
 	if !unary {
 		appIDs := utils.ParseAppIDsFromNameFilters(req.GetNameFilters())
-		sub, err = s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeApp, ct.EventTypeAppDeletion, ct.EventTypeAppRelease}, "")
+		sub, err = s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeApp, ct.EventTypeAppDeletion, ct.EventTypeAppRelease}, nil)
 		if err != nil {
 			// TODO(jvatic): return proper error code
 			return err
@@ -483,7 +484,7 @@ func (s *server) createScale(req *protobuf.CreateScaleRequest) (*protobuf.ScaleR
 	processes := parseDeploymentProcesses(req.Processes)
 	tags := parseDeploymentTags(req.Tags)
 
-	sub, err := s.subscribeEvents([]string{appID}, []ct.EventType{ct.EventTypeScaleRequest}, "")
+	sub, err := s.subscribeEvents([]string{appID}, []ct.EventType{ct.EventTypeScaleRequest}, nil)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return nil, err
@@ -612,7 +613,7 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 		return nil
 	}
 
-	sub, err := s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeScaleRequest}, "")
+	sub, err := s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeScaleRequest}, nil)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
@@ -621,7 +622,7 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 
 	// get all events up until now
 	var currID int64
-	list, err := s.eventRepo.ListEvents(appIDs, []string{string(ct.EventTypeScaleRequest)}, "", nil, nil, 0)
+	list, err := s.eventRepo.ListEvents(appIDs, []string{string(ct.EventTypeScaleRequest)}, nil, nil, nil, 0)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
@@ -776,7 +777,7 @@ func (s *server) StreamReleases(req *protobuf.StreamReleasesRequest, stream prot
 		return nil
 	}
 
-	sub, err := s.subscribeEvents(eventAppIDs, []ct.EventType{ct.EventTypeRelease}, "")
+	sub, err := s.subscribeEvents(eventAppIDs, []ct.EventType{ct.EventTypeRelease}, nil)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
@@ -789,7 +790,7 @@ func (s *server) StreamReleases(req *protobuf.StreamReleasesRequest, stream prot
 	if count > 0 {
 		count = count + 1 // request 1 more than what we need to see if there's a next page
 	}
-	list, err := s.eventRepo.ListEvents(eventAppIDs, []string{string(ct.EventTypeRelease)}, "", pageToken.BeforeIDInt64(), nil, count)
+	list, err := s.eventRepo.ListEvents(eventAppIDs, []string{string(ct.EventTypeRelease)}, nil, pageToken.BeforeIDInt64(), nil, count)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
@@ -919,7 +920,7 @@ func (s *server) StreamFormations(req *protobuf.StreamFormationsRequest, stream 
 
 	var wg sync.WaitGroup
 
-	sub, err := s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeScaleRequest, ct.EventTypeAppRelease}, "")
+	sub, err := s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeScaleRequest, ct.EventTypeAppRelease}, nil)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return utils.ConvertError(err, err.Error())
@@ -1063,7 +1064,7 @@ func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, strea
 
 	var wg sync.WaitGroup
 
-	sub, err := s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeDeployment}, "")
+	sub, err := s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeDeployment}, nil)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
@@ -1133,7 +1134,7 @@ func (s *server) CreateDeployment(req *protobuf.CreateDeploymentRequest, ds prot
 
 	// Wait for deployment to complete and perform scale
 
-	sub, err := s.subscribeEvents([]string{appID}, []ct.EventType{ct.EventTypeDeployment}, d.ID)
+	sub, err := s.subscribeEvents([]string{appID}, []ct.EventType{ct.EventTypeDeployment}, []string{d.ID})
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err

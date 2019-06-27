@@ -31,17 +31,17 @@ func (s *S) TestEvents(c *C) {
 	c.Assert(listener.Listen(), IsNil)
 
 	// sub1 should receive job events for app1, job1
-	sub1, err := listener.Subscribe(app1.ID, []string{string(ct.EventTypeJob)}, jobID1)
+	sub1, err := listener.Subscribe(app1.ID, []string{string(ct.EventTypeJob)}, []string{jobID1})
 	c.Assert(err, IsNil)
 	defer sub1.Close()
 
 	// sub2 should receive all job events for app1
-	sub2, err := listener.Subscribe(app1.ID, []string{string(ct.EventTypeJob)}, "")
+	sub2, err := listener.Subscribe(app1.ID, []string{string(ct.EventTypeJob)}, nil)
 	c.Assert(err, IsNil)
 	defer sub2.Close()
 
 	// sub3 should receive all job events for app2
-	sub3, err := listener.Subscribe(app2.ID, []string{}, "")
+	sub3, err := listener.Subscribe(app2.ID, []string{}, nil)
 	c.Assert(err, IsNil)
 	defer sub3.Close()
 

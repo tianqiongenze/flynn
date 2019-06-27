@@ -21,7 +21,7 @@ func NewEventRepo(db *postgres.DB) *EventRepo {
 	return &EventRepo{db: db}
 }
 
-func (r *EventRepo) ListEvents(appIDs []string, objectTypes []string, objectID string, beforeID *int64, sinceID *int64, count int) ([]*ct.Event, error) {
+func (r *EventRepo) ListEvents(appIDs []string, objectTypes []string, objectIDs []string, beforeID *int64, sinceID *int64, count int) ([]*ct.Event, error) {
 	query := "SELECT event_id, app_id, object_id, object_type, data, op, created_at FROM events"
 	var conditions []string
 	var n int
@@ -36,10 +36,19 @@ func (r *EventRepo) ListEvents(appIDs []string, objectTypes []string, objectID s
 		conditions = append(conditions, fmt.Sprintf("event_id > $%d", n))
 		args = append(args, *sinceID)
 	}
-	if len(appIDs) > 0 {
+	if len(appIDs) > 0 && len(objectIDs) > 0 {
+		n++
+		conditions = append(conditions, fmt.Sprintf("(app_id::text = ANY($%d::text[]) OR object_id::text = ANY($%d::text[]))", n, n+1))
+		n++
+		args = append(args, appIDs, objectIDs)
+	} else if len(appIDs) > 0 {
 		n++
 		conditions = append(conditions, fmt.Sprintf("app_id::text = ANY($%d::text[])", n))
 		args = append(args, appIDs)
+	} else if len(objectIDs) > 0 {
+		n++
+		conditions = append(conditions, fmt.Sprintf("object_id::text = ANY($%d::text[])", n))
+		args = append(args, objectIDs)
 	}
 	if len(objectTypes) > 0 {
 		c := "("
@@ -53,11 +62,6 @@ func (r *EventRepo) ListEvents(appIDs []string, objectTypes []string, objectID s
 		}
 		c += ")"
 		conditions = append(conditions, c)
-	}
-	if objectID != "" {
-		n++
-		conditions = append(conditions, fmt.Sprintf("object_id = $%d", n))
-		args = append(args, objectID)
 	}
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
@@ -134,7 +138,7 @@ type EventSubscriber struct {
 	queue       chan *ct.Event
 	appID       string
 	objectTypes []string
-	objectID    string
+	objectIDs   []string
 
 	stop     chan struct{}
 	stopOnce sync.Once
@@ -155,8 +159,17 @@ func (e *EventSubscriber) Notify(event *ct.Event) {
 			return
 		}
 	}
-	if e.objectID != "" && e.objectID != event.ObjectID {
-		return
+	if len(e.objectIDs) > 0 {
+		foundID := false
+		for _, id := range e.objectIDs {
+			if id == event.ObjectID {
+				foundID = true
+				break
+			}
+		}
+		if !foundID {
+			return
+		}
 	}
 	select {
 	case e.queue <- event:
@@ -214,7 +227,7 @@ type EventListener struct {
 
 // Subscribe creates and returns an EventSubscriber for the given app, type and object.
 // Using an empty string for appID subscribes to all apps
-func (e *EventListener) Subscribe(appID string, objectTypes []string, objectID string) (*EventSubscriber, error) {
+func (e *EventListener) Subscribe(appID string, objectTypes []string, objectIDs []string) (*EventSubscriber, error) {
 	e.subMtx.Lock()
 	defer e.subMtx.Unlock()
 	if e.IsClosed() {
@@ -227,7 +240,7 @@ func (e *EventListener) Subscribe(appID string, objectTypes []string, objectID s
 		stop:        make(chan struct{}),
 		appID:       appID,
 		objectTypes: objectTypes,
-		objectID:    objectID,
+		objectIDs:   objectIDs,
 	}
 	go s.loop()
 	if _, ok := e.subscribers[appID]; !ok {

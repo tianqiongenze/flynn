@@ -108,8 +108,12 @@ func listEvents(ctx context.Context, w http.ResponseWriter, req *http.Request, a
 		objectTypes = []string{}
 	}
 	objectID := req.FormValue("object_id")
+	objectIDs := []string{objectID}
+	if objectID == "" {
+		objectIDs = nil
+	}
 
-	list, err := repo.ListEvents([]string{appID}, objectTypes, objectID, beforeID, sinceID, count)
+	list, err := repo.ListEvents([]string{appID}, objectTypes, objectIDs, beforeID, sinceID, count)
 	if err != nil {
 		return err
 	}
@@ -143,11 +147,14 @@ func streamEvents(ctx context.Context, w http.ResponseWriter, req *http.Request,
 	if len(objectTypes) == 1 && objectTypes[0] == "" {
 		objectTypes = []string{}
 	}
-	objectID := req.FormValue("object_id")
+	objectIDs := []string{req.FormValue("object_id")}
+	if objectIDs[0] == "" {
+		objectIDs = nil
+	}
 	past := req.FormValue("past")
 
 	l, _ := ctxhelper.LoggerFromContext(ctx)
-	log := l.New("fn", "streamEvents", "object_types", objectTypes, "object_id", objectID)
+	log := l.New("fn", "streamEvents", "object_types", objectTypes, "object_ids", objectIDs)
 	ch := make(chan *ct.Event)
 	s := sse.NewStream(w, ch, log)
 	s.Serve()
@@ -159,7 +166,7 @@ func streamEvents(ctx context.Context, w http.ResponseWriter, req *http.Request,
 		}
 	}()
 
-	sub, err := eventListener.Subscribe(appID, objectTypes, objectID)
+	sub, err := eventListener.Subscribe(appID, objectTypes, objectIDs)
 	if err != nil {
 		return err
 	}
@@ -167,7 +174,7 @@ func streamEvents(ctx context.Context, w http.ResponseWriter, req *http.Request,
 
 	var currID int64
 	if past == "true" || lastID > 0 {
-		list, err := repo.ListEvents([]string{appID}, objectTypes, objectID, nil, &lastID, count)
+		list, err := repo.ListEvents([]string{appID}, objectTypes, objectIDs, nil, &lastID, count)
 		if err != nil {
 			return err
 		}
