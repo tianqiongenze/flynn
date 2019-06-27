@@ -21,56 +21,148 @@ func NewEventRepo(db *postgres.DB) *EventRepo {
 	return &EventRepo{db: db}
 }
 
-func (r *EventRepo) ListEvents(appIDs []string, objectTypes []string, objectIDs []string, beforeID *int64, sinceID *int64, count int) ([]*ct.Event, error) {
-	query := "SELECT event_id, app_id, object_id, object_type, data, op, created_at FROM events"
-	var conditions []string
-	var n int
-	args := []interface{}{}
+type ListEventsOption func(opts *listEventsOptions)
+
+type listEventsOptions struct {
+	AppIDs       []string
+	ObjectTypes  []string
+	ObjectIDs    []string
+	ObjectFields map[string][]string
+	BeforeID     *int64
+	SinceID      *int64
+	Count        int
+}
+
+func ListEventsOptionAppIDs(appIDs []string) ListEventsOption {
+	return func(opts *listEventsOptions) {
+		opts.AppIDs = appIDs
+	}
+}
+
+func ListEventsOptionObjectTypes(objectTypes []string) ListEventsOption {
+	return func(opts *listEventsOptions) {
+		opts.ObjectTypes = objectTypes
+	}
+}
+
+func ListEventsOptionObjectIDs(objectIDs []string) ListEventsOption {
+	return func(opts *listEventsOptions) {
+		opts.ObjectIDs = objectIDs
+	}
+}
+
+func ListEventsOptionObjectField(name string, values []string) ListEventsOption {
+	return func(opts *listEventsOptions) {
+		if opts.ObjectFields == nil {
+			opts.ObjectFields = make(map[string][]string, 1)
+		}
+		f := opts.ObjectFields[name]
+		f = append(f, values...)
+		opts.ObjectFields[name] = f
+	}
+}
+
+func ListEventsOptionBeforeID(beforeID int64) ListEventsOption {
+	return func(opts *listEventsOptions) {
+		opts.BeforeID = &beforeID
+	}
+}
+
+func ListEventsOptionSinceID(sinceID int64) ListEventsOption {
+	return func(opts *listEventsOptions) {
+		opts.SinceID = &sinceID
+	}
+}
+
+func ListEventsOptionCount(count int) ListEventsOption {
+	return func(opts *listEventsOptions) {
+		opts.Count = count
+	}
+}
+
+func (r *EventRepo) LegacyListEvents(appIDs []string, objectTypes []string, objectIDs []string, beforeID *int64, sinceID *int64, count int) ([]*ct.Event, error) {
+	options := make([]ListEventsOption, 0, 6)
+	options = append(options, ListEventsOptionAppIDs(appIDs))
+	options = append(options, ListEventsOptionObjectTypes(objectTypes))
+	options = append(options, ListEventsOptionObjectIDs(objectIDs))
 	if beforeID != nil {
-		n++
-		conditions = append(conditions, fmt.Sprintf("event_id < $%d", n))
-		args = append(args, *beforeID)
+		options = append(options, ListEventsOptionBeforeID(*beforeID))
 	}
 	if sinceID != nil {
-		n++
-		conditions = append(conditions, fmt.Sprintf("event_id > $%d", n))
-		args = append(args, *sinceID)
+		options = append(options, ListEventsOptionSinceID(*sinceID))
 	}
-	if len(appIDs) > 0 && len(objectIDs) > 0 {
-		n++
-		conditions = append(conditions, fmt.Sprintf("(app_id::text = ANY($%d::text[]) OR object_id::text = ANY($%d::text[]))", n, n+1))
-		n++
-		args = append(args, appIDs, objectIDs)
-	} else if len(appIDs) > 0 {
-		n++
-		conditions = append(conditions, fmt.Sprintf("app_id::text = ANY($%d::text[])", n))
-		args = append(args, appIDs)
-	} else if len(objectIDs) > 0 {
-		n++
-		conditions = append(conditions, fmt.Sprintf("object_id::text = ANY($%d::text[])", n))
-		args = append(args, objectIDs)
+	options = append(options, ListEventsOptionCount(count))
+	return r.ListEvents(options...)
+}
+
+func (r *EventRepo) ListEvents(options ...ListEventsOption) ([]*ct.Event, error) {
+	opts := &listEventsOptions{}
+	for _, fn := range options {
+		fn(opts)
 	}
-	if len(objectTypes) > 0 {
-		c := "("
-		for i, typ := range objectTypes {
-			if i > 0 {
-				c += " OR "
-			}
+
+	query := "SELECT event_id, app_id, object_id, object_type, data, op, created_at FROM events"
+	var conditions [][]string
+	var n int
+	args := []interface{}{}
+	if opts.BeforeID != nil {
+		n++
+		conditions = append(conditions, []string{fmt.Sprintf("event_id < $%d", n)})
+		args = append(args, *opts.BeforeID)
+	}
+	if opts.SinceID != nil {
+		n++
+		conditions = append(conditions, []string{fmt.Sprintf("event_id > $%d", n)})
+		args = append(args, *opts.SinceID)
+	}
+	if len(opts.AppIDs) > 0 || len(opts.ObjectIDs) > 0 || len(opts.ObjectFields) > 0 {
+		c := []string{}
+		if len(opts.AppIDs) > 0 {
 			n++
-			c += fmt.Sprintf("object_type = $%d", n)
+			c = append(c, fmt.Sprintf("app_id::text = ANY($%d::text[])", n))
+			args = append(args, opts.AppIDs)
+		}
+		if len(opts.ObjectIDs) > 0 {
+			n++
+			c = append(c, fmt.Sprintf("object_id::text = ANY($%d::text[])", n))
+			args = append(args, opts.ObjectIDs)
+		}
+		if len(opts.ObjectFields) > 0 {
+			for name, values := range opts.ObjectFields {
+				for _, value := range values {
+					c = append(c, fmt.Sprintf("data->>$%d = $%d", n+1, n+2))
+					n = n + 2
+					args = append(args, name, value)
+				}
+			}
+		}
+		if len(c) > 0 {
+			conditions = append(conditions, c)
+		}
+	}
+	if len(opts.ObjectTypes) > 0 {
+		c := make([]string, 0, len(opts.ObjectTypes))
+		for _, typ := range opts.ObjectTypes {
+			n++
+			c = append(c, fmt.Sprintf("object_type = $%d", n))
 			args = append(args, typ)
 		}
-		c += ")"
 		conditions = append(conditions, c)
 	}
 	if len(conditions) > 0 {
-		query += " WHERE " + strings.Join(conditions, " AND ")
+		query += " WHERE "
+		for i, c := range conditions {
+			if i > 0 {
+				query += " AND "
+			}
+			query += fmt.Sprintf("(%s)", strings.Join(c, " OR "))
+		}
 	}
 	query += " ORDER BY event_id DESC"
-	if count > 0 {
+	if opts.Count > 0 {
 		n++
 		query += fmt.Sprintf(" LIMIT $%d", n)
-		args = append(args, count)
+		args = append(args, opts.Count)
 	}
 	rows, err := r.db.Query(query, args...)
 	if err != nil {

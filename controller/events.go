@@ -113,7 +113,7 @@ func listEvents(ctx context.Context, w http.ResponseWriter, req *http.Request, a
 		objectIDs = nil
 	}
 
-	list, err := repo.ListEvents([]string{appID}, objectTypes, objectIDs, beforeID, sinceID, count)
+	list, err := repo.LegacyListEvents([]string{appID}, objectTypes, objectIDs, beforeID, sinceID, count)
 	if err != nil {
 		return err
 	}
@@ -174,7 +174,7 @@ func streamEvents(ctx context.Context, w http.ResponseWriter, req *http.Request,
 
 	var currID int64
 	if past == "true" || lastID > 0 {
-		list, err := repo.ListEvents([]string{appID}, objectTypes, objectIDs, nil, &lastID, count)
+		list, err := repo.LegacyListEvents([]string{appID}, objectTypes, objectIDs, nil, &lastID, count)
 		if err != nil {
 			return err
 		}
