@@ -12,7 +12,6 @@ import (
 	"github.com/flynn/flynn/controller-grpc/protobuf"
 	"github.com/flynn/flynn/controller-grpc/utils"
 	"github.com/flynn/flynn/controller/data"
-	"github.com/flynn/flynn/controller/schema"
 	ct "github.com/flynn/flynn/controller/types"
 	"github.com/flynn/flynn/pkg/postgres"
 	"github.com/flynn/flynn/pkg/random"
@@ -73,7 +72,7 @@ func (s *S) SetUpSuite(c *C) {
 			Host:     "/var/run/postgresql",
 			Database: dbname,
 		},
-		AfterConnect: schema.PrepareStatements,
+		AfterConnect: data.PrepareStatements,
 	})
 	if err != nil {
 		c.Fatal(err)

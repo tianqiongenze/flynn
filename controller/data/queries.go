@@ -1,4 +1,4 @@
-package schema
+package data
 
 import (
 	"github.com/flynn/que-go"

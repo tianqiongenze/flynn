@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	controller "github.com/flynn/flynn/controller/client"
-	"github.com/flynn/flynn/controller/schema"
 	ct "github.com/flynn/flynn/controller/types"
 	"github.com/flynn/flynn/pkg/postgres"
 	"github.com/flynn/flynn/pkg/shutdown"
@@ -86,7 +85,7 @@ func OpenAndMigrateDB(conf *postgres.Conf) *postgres.DB {
 
 	// Reconnect, preparing statements now that schema is migrated
 	db.Close()
-	db = postgres.Wait(conf, schema.PrepareStatements)
+	db = postgres.Wait(conf, PrepareStatements)
 
 	return db
 }

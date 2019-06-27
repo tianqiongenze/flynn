@@ -12,7 +12,6 @@ import (
 
 	"github.com/flynn/flynn/controller/client"
 	"github.com/flynn/flynn/controller/data"
-	"github.com/flynn/flynn/controller/schema"
 	tu "github.com/flynn/flynn/controller/testutils"
 	ct "github.com/flynn/flynn/controller/types"
 	"github.com/flynn/flynn/controller/utils"
@@ -77,7 +76,7 @@ func (s *S) SetUpSuite(c *C) {
 			Host:     "/var/run/postgresql",
 			Database: dbname,
 		},
-		AfterConnect: schema.PrepareStatements,
+		AfterConnect: data.PrepareStatements,
 	})
 	if err != nil {
 		c.Fatal(err)

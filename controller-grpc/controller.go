@@ -15,7 +15,6 @@ import (
 	"github.com/flynn/flynn/controller-grpc/protobuf"
 	"github.com/flynn/flynn/controller-grpc/utils"
 	"github.com/flynn/flynn/controller/data"
-	controllerschema "github.com/flynn/flynn/controller/schema"
 	ct "github.com/flynn/flynn/controller/types"
 	"github.com/flynn/flynn/pkg/cors"
 	"github.com/flynn/flynn/pkg/ctxhelper"
@@ -57,7 +56,7 @@ func main() {
 	logger.Debug("opening database connection...")
 
 	// Open connection to main controller database
-	db := postgres.Wait(nil, controllerschema.PrepareStatements)
+	db := postgres.Wait(nil, data.PrepareStatements)
 	shutdown.BeforeExit(func() { db.Close() })
 	q := que.NewClient(db.ConnPool)
 
