@@ -155,6 +155,7 @@ func (r *FormationRepo) AddScaleRequest(req *ct.ScaleRequest, deleteFormation bo
 		AppID:      req.AppID,
 		ObjectID:   req.ID,
 		ObjectType: ct.EventTypeScaleRequest,
+		Op:         ct.EventOpCreate,
 	}, req); err != nil {
 		tx.Rollback()
 		return nil, err
@@ -379,6 +380,7 @@ func (r *FormationRepo) UpdateScaleRequest(req *ct.ScaleRequest) error {
 		AppID:      req.AppID,
 		ObjectID:   req.ID,
 		ObjectType: ct.EventTypeScaleRequest,
+		Op:         ct.EventOpUpdate,
 	}, req); err != nil {
 		tx.Rollback()
 		return err
