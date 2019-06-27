@@ -42,12 +42,12 @@ func (c *controllerAPI) PutFormation(ctx context.Context, w http.ResponseWriter,
 	}
 
 	req := newScaleRequest(formation, release)
-	formation, err = c.formationRepo.AddScaleRequest(req, false)
+	req, err = c.formationRepo.AddScaleRequest(req, false)
 	if err != nil {
 		respondWithError(w, err)
 		return
 	}
-	httphelper.JSON(w, 200, formation)
+	httphelper.JSON(w, 200, scaleRequestAsFormation(req))
 }
 
 func (c *controllerAPI) PutScaleRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -253,5 +253,24 @@ func newScaleRequest(f *ct.Formation, release *ct.Release) *ct.ScaleRequest {
 		ReleaseID:    f.ReleaseID,
 		NewProcesses: &f.Processes,
 		NewTags:      &f.Tags,
+	}
+}
+
+func scaleRequestAsFormation(sr *ct.ScaleRequest) *ct.Formation {
+	var processes map[string]int
+	if sr.NewProcesses != nil {
+		processes = *sr.NewProcesses
+	}
+	var tags map[string]map[string]string
+	if sr.NewTags != nil {
+		tags = *sr.NewTags
+	}
+	return &ct.Formation{
+		AppID:     sr.AppID,
+		ReleaseID: sr.ReleaseID,
+		Processes: processes,
+		Tags:      tags,
+		CreatedAt: sr.CreatedAt,
+		UpdatedAt: sr.UpdatedAt,
 	}
 }

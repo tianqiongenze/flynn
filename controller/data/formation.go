@@ -48,7 +48,7 @@ func (r *FormationRepo) validateProcesses(req *ct.ScaleRequest) error {
 	return nil
 }
 
-func (r *FormationRepo) AddScaleRequest(req *ct.ScaleRequest, deleteFormation bool) (*ct.Formation, error) {
+func (r *FormationRepo) AddScaleRequest(req *ct.ScaleRequest, deleteFormation bool) (*ct.ScaleRequest, error) {
 	if req.NewProcesses == nil && req.NewTags == nil {
 		return nil, ct.ValidationError{Message: "scale request must have either processes or tags set"}
 	}
@@ -177,7 +177,7 @@ func (r *FormationRepo) AddScaleRequest(req *ct.ScaleRequest, deleteFormation bo
 		}
 	}
 
-	return formation, tx.Commit()
+	return req, tx.Commit()
 }
 
 func scanFormations(rows *pgx.Rows) ([]*ct.Formation, error) {
