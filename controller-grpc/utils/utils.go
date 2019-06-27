@@ -193,7 +193,7 @@ func ConvertScaleRequest(ctScaleReq *ct.ScaleRequest) *protobuf.ScaleRequest {
 
 	return &protobuf.ScaleRequest{
 		Parent:       fmt.Sprintf("apps/%s/releases/%s", ctScaleReq.AppID, ctScaleReq.ReleaseID),
-		Name:         fmt.Sprintf("apps/%s/releases/%s/scale/%s", ctScaleReq.AppID, ctScaleReq.ReleaseID, ctScaleReq.ID),
+		Name:         fmt.Sprintf("apps/%s/releases/%s/scales/%s", ctScaleReq.AppID, ctScaleReq.ReleaseID, ctScaleReq.ID),
 		State:        state,
 		OldProcesses: ConvertDeploymentProcesses(ctScaleReq.OldProcesses),
 		NewProcesses: newProcesses,

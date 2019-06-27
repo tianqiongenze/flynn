@@ -2109,8 +2109,7 @@ proto.controller.StreamScalesRequest.toObject = function(includeInstance, msg) {
     pageSize: jspb.Message.getFieldWithDefault(msg, 1, 0),
     pageToken: jspb.Message.getFieldWithDefault(msg, 2, ""),
     nameFiltersList: jspb.Message.getRepeatedField(msg, 3),
-    labelFiltersList: jspb.Message.toObjectList(msg.getLabelFiltersList(),
-    proto.controller.LabelFilter.toObject, includeInstance),
+    stateFiltersList: jspb.Message.getRepeatedField(msg, 4),
     streamUpdates: jspb.Message.getFieldWithDefault(msg, 5, false),
     streamCreates: jspb.Message.getFieldWithDefault(msg, 6, false)
   };
@@ -2162,9 +2161,8 @@ proto.controller.StreamScalesRequest.deserializeBinaryFromReader = function(msg,
       msg.addNameFilters(value);
       break;
     case 4:
-      var value = new proto.controller.LabelFilter;
-      reader.readMessage(value,proto.controller.LabelFilter.deserializeBinaryFromReader);
-      msg.addLabelFilters(value);
+      var value = /** @type {!Array<!proto.controller.ScaleRequestState>} */ (reader.readPackedEnum());
+      msg.setStateFiltersList(value);
       break;
     case 5:
       var value = /** @type {boolean} */ (reader.readBool());
@@ -2224,12 +2222,11 @@ proto.controller.StreamScalesRequest.serializeBinaryToWriter = function(message,
       f
     );
   }
-  f = message.getLabelFiltersList();
+  f = message.getStateFiltersList();
   if (f.length > 0) {
-    writer.writeRepeatedMessage(
+    writer.writePackedEnum(
       4,
-      f,
-      proto.controller.LabelFilter.serializeBinaryToWriter
+      f
     );
   }
   f = message.getStreamUpdates();
@@ -2312,36 +2309,34 @@ proto.controller.StreamScalesRequest.prototype.clearNameFiltersList = function()
 
 
 /**
- * repeated LabelFilter label_filters = 4;
- * @return {!Array<!proto.controller.LabelFilter>}
+ * repeated ScaleRequestState state_filters = 4;
+ * @return {!Array<!proto.controller.ScaleRequestState>}
  */
-proto.controller.StreamScalesRequest.prototype.getLabelFiltersList = function() {
-  return /** @type{!Array<!proto.controller.LabelFilter>} */ (
-    jspb.Message.getRepeatedWrapperField(this, proto.controller.LabelFilter, 4));
+proto.controller.StreamScalesRequest.prototype.getStateFiltersList = function() {
+  return /** @type {!Array<!proto.controller.ScaleRequestState>} */ (jspb.Message.getRepeatedField(this, 4));
 };
 
 
-/** @param {!Array<!proto.controller.LabelFilter>} value */
-proto.controller.StreamScalesRequest.prototype.setLabelFiltersList = function(value) {
-  jspb.Message.setRepeatedWrapperField(this, 4, value);
+/** @param {!Array<!proto.controller.ScaleRequestState>} value */
+proto.controller.StreamScalesRequest.prototype.setStateFiltersList = function(value) {
+  jspb.Message.setField(this, 4, value || []);
 };
 
 
 /**
- * @param {!proto.controller.LabelFilter=} opt_value
+ * @param {!proto.controller.ScaleRequestState} value
  * @param {number=} opt_index
- * @return {!proto.controller.LabelFilter}
  */
-proto.controller.StreamScalesRequest.prototype.addLabelFilters = function(opt_value, opt_index) {
-  return jspb.Message.addToRepeatedWrapperField(this, 4, opt_value, proto.controller.LabelFilter, opt_index);
+proto.controller.StreamScalesRequest.prototype.addStateFilters = function(value, opt_index) {
+  jspb.Message.addToRepeatedField(this, 4, value, opt_index);
 };
 
 
 /**
  * Clears the list making it empty but non-null.
  */
-proto.controller.StreamScalesRequest.prototype.clearLabelFiltersList = function() {
-  this.setLabelFiltersList([]);
+proto.controller.StreamScalesRequest.prototype.clearStateFiltersList = function() {
+  this.setStateFiltersList([]);
 };
 
 

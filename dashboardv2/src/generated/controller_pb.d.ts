@@ -228,10 +228,10 @@ export class StreamScalesRequest extends jspb.Message {
   setNameFiltersList(value: Array<string>): void;
   addNameFilters(value: string, index?: number): string;
 
-  clearLabelFiltersList(): void;
-  getLabelFiltersList(): Array<LabelFilter>;
-  setLabelFiltersList(value: Array<LabelFilter>): void;
-  addLabelFilters(value?: LabelFilter, index?: number): LabelFilter;
+  clearStateFiltersList(): void;
+  getStateFiltersList(): Array<ScaleRequestStateMap[keyof ScaleRequestStateMap]>;
+  setStateFiltersList(value: Array<ScaleRequestStateMap[keyof ScaleRequestStateMap]>): void;
+  addStateFilters(value: ScaleRequestStateMap[keyof ScaleRequestStateMap], index?: number): ScaleRequestStateMap[keyof ScaleRequestStateMap];
 
   getStreamUpdates(): boolean;
   setStreamUpdates(value: boolean): void;
@@ -254,7 +254,7 @@ export namespace StreamScalesRequest {
     pageSize: number,
     pageToken: string,
     nameFiltersList: Array<string>,
-    labelFiltersList: Array<LabelFilter.AsObject>,
+    stateFiltersList: Array<ScaleRequestStateMap[keyof ScaleRequestStateMap]>,
     streamUpdates: boolean,
     streamCreates: boolean,
   }

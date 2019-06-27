@@ -139,8 +139,8 @@ message StreamScalesRequest {
   // names may also be used to filter resources.
   repeated string name_filters = 3;
 
-  // filters are ORed
-  repeated LabelFilter label_filters = 4;
+  // When set, only includes resources having one of the specified states
+  repeated ScaleRequestState state_filters = 4;
 
   // When true, leaves the stream open and sends any updates to each resource
   // returned in the initial page until the stream is closed.
@@ -386,7 +386,7 @@ enum ScaleRequestState {
 message ScaleRequest {
   // parent = "apps/APP_ID/releases/RELEASE_ID"
   string parent = 1;
-  // name = "apps/APP_ID/releases/RELEASE_ID/scale/SCALE_REQUEST_ID"
+  // name = "apps/APP_ID/releases/RELEASE_ID/scales/SCALE_REQUEST_ID"
   string name = 2;
   ScaleRequestState state = 3;
   map<string, int32> old_processes = 4;
