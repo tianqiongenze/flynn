@@ -37,7 +37,7 @@ var preparedStatements = map[string]string{
 	"artifact_release_count":                artifactReleaseCountQuery,
 	"artifact_layer_count":                  artifactLayerCountQuery,
 	"deployment_list":                       deploymentListQuery,
-	"deployment_list_all_expanded":          deploymentListAllExpandedQuery,
+	"deployment_list_page":                  deploymentListPageQuery,
 	"deployment_select":                     deploymentSelectQuery,
 	"deployment_select_expanded":            deploymentSelectExpandedQuery,
 	"deployment_insert":                     deploymentInsertQuery,
@@ -281,7 +281,7 @@ LEFT OUTER JOIN deployment_events e2
   ON (d.deployment_id = e2.object_id::uuid AND e1.created_at < e2.created_at)
 WHERE e2.created_at IS NULL AND d.app_id = $1 ORDER BY d.created_at DESC`
 	// TODO(jvatic): pagination
-	deploymentListAllExpandedQuery = `
+	deploymentListPageQuery = `
 WITH deployment_events AS (SELECT * FROM events WHERE object_type = 'deployment')
 SELECT d.deployment_id, d.app_id, d.old_release_id, d.new_release_id,
   d.strategy, e1.data->>'status' AS status,
@@ -307,6 +307,7 @@ LEFT OUTER JOIN releases old_r
 	ON d.old_release_id = old_r.release_id
 LEFT OUTER JOIN releases new_r
 	ON d.new_release_id = new_r.release_id
+LEFT OUTER JOIN (SELECT deployment_id, created_at FROM deployments WHERE deployment_id = $3 LIMIT 1) AS before_d ON true
 WHERE e2.created_at IS NULL
 AND CASE
 	WHEN array_length($1::text[], 1) > 0 AND array_length($2::text[], 1) > 0
@@ -317,8 +318,13 @@ AND CASE
 		THEN d.deployment_id::text = ANY($2::text[])
 	ELSE true
 END
+AND CASE WHEN before_d IS NULL THEN true
+ELSE
+	d.created_at <= before_d.created_at
+	AND d.deployment_id != before_d.deployment_id
+END
 ORDER BY d.created_at DESC
-LIMIT $3
+LIMIT $4
 `
 	eventSelectQuery = `
 SELECT event_id, app_id, object_id, object_type, data, op, created_at

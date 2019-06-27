@@ -983,21 +983,21 @@ func (s *server) CreateRelease(ctx context.Context, req *protobuf.CreateReleaseR
 	return utils.ConvertRelease(ctRelease), nil
 }
 
-func (s *server) listDeployments(req *protobuf.StreamDeploymentsRequest) ([]*protobuf.ExpandedDeployment, error) {
+func (s *server) listDeployments(req *protobuf.StreamDeploymentsRequest) ([]*protobuf.ExpandedDeployment, *data.PageToken, error) {
 	pageToken, err := data.ParsePageToken(req.PageToken)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if req.PageSize > 0 {
 		pageToken.Size = int(req.PageSize)
 	}
-	ctExpandedDeployments, err := s.deploymentRepo.ListExpanded(data.ListDeploymentOptions{
-		PageToken:     pageToken,
+	ctExpandedDeployments, nextPageToken, err := s.deploymentRepo.ListPage(data.ListDeploymentOptions{
+		PageToken:     *pageToken,
 		AppIDs:        utils.ParseIDsFromNameFilters(req.NameFilters, "apps"),
 		DeploymentIDs: utils.ParseIDsFromNameFilters(req.NameFilters, "deployments"),
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	deployments := make([]*protobuf.ExpandedDeployment, 0, len(ctExpandedDeployments))
@@ -1020,7 +1020,7 @@ func (s *server) listDeployments(req *protobuf.StreamDeploymentsRequest) ([]*pro
 		}
 	}
 
-	return filtered, nil
+	return filtered, nextPageToken, nil
 }
 
 func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, stream protobuf.Controller_StreamDeploymentsServer) error {
@@ -1033,18 +1033,21 @@ func (s *server) StreamDeployments(req *protobuf.StreamDeploymentsRequest, strea
 
 	var deploymentsMtx sync.RWMutex
 	var deployments []*protobuf.ExpandedDeployment
+	var nextPageToken *data.PageToken
 	refreshDeployments := func() error {
 		deploymentsMtx.Lock()
 		defer deploymentsMtx.Unlock()
 		var err error
-		deployments, err = s.listDeployments(req)
+		deployments, nextPageToken, err = s.listDeployments(req)
 		return err
 	}
 
 	sendResponse := func() {
 		deploymentsMtx.RLock()
 		stream.Send(&protobuf.StreamDeploymentsResponse{
-			Deployments: deployments,
+			Deployments:   deployments,
+			PageComplete:  true,
+			NextPageToken: nextPageToken.String(),
 		})
 		deploymentsMtx.RUnlock()
 	}

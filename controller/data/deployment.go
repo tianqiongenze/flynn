@@ -214,32 +214,40 @@ func (r *DeploymentRepo) List(appID string) ([]*ct.Deployment, error) {
 }
 
 type ListDeploymentOptions struct {
-	PageToken     *PageToken
+	PageToken     PageToken
 	AppIDs        []string
 	DeploymentIDs []string
 }
 
-func (r *DeploymentRepo) ListExpanded(opts ListDeploymentOptions) ([]*ct.ExpandedDeployment, error) {
+func (r *DeploymentRepo) ListPage(opts ListDeploymentOptions) ([]*ct.ExpandedDeployment, *PageToken, error) {
 	var pageSize int
-	if opts.PageToken != nil && opts.PageToken.Size > 0 {
+	if opts.PageToken.Size > 0 {
 		pageSize = opts.PageToken.Size
 	} else {
 		pageSize = DEFAULT_PAGE_SIZE
 	}
-	rows, err := r.db.Query("deployment_list_all_expanded", opts.AppIDs, opts.DeploymentIDs, pageSize)
+	rows, err := r.db.Query("deployment_list_page", opts.AppIDs, opts.DeploymentIDs, opts.PageToken.BeforeID, pageSize+1)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var deployments []*ct.ExpandedDeployment
 	for rows.Next() {
 		deployment, err := scanExpandedDeployment(rows)
 		if err != nil {
 			rows.Close()
-			return nil, err
+			return nil, nil, err
 		}
 		deployments = append(deployments, deployment)
 	}
-	return deployments, rows.Err()
+	var nextPageToken *PageToken
+	if len(deployments) == pageSize+1 {
+		deployments = deployments[0:pageSize]
+		nextPageToken = &PageToken{
+			BeforeID: &deployments[0].ID,
+			Size:     pageSize,
+		}
+	}
+	return deployments, nextPageToken, rows.Err()
 }
 
 func scanExpandedDeployment(s postgres.Scanner) (*ct.ExpandedDeployment, error) {

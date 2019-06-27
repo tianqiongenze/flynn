@@ -986,7 +986,7 @@ func (s *S) TestStreamDeployments(c *C) {
 	stream, cancel = streamDeploymentsWithCancel(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testApp2.Name}})
 	receiveDeploymentsStream(stream) // initial page
 	testRelease6 := s.createTestRelease(c, testApp2.Name, &protobuf.Release{Labels: map[string]string{"i": "6"}})
-	s.createTestDeployment(c, testRelease6.Name)
+	testDeployment6 := s.createTestDeployment(c, testRelease6.Name)
 	res = receiveDeploymentsStream(stream)
 	c.Assert(res, IsNil)
 	cancel()
@@ -995,7 +995,7 @@ func (s *S) TestStreamDeployments(c *C) {
 	stream, cancel = streamDeploymentsWithCancel(&protobuf.StreamDeploymentsRequest{NameFilters: []string{testApp2.Name}, StreamCreates: true})
 	receiveDeploymentsStream(stream) // initial page
 	testRelease7 := s.createTestRelease(c, testApp1.Name, &protobuf.Release{Labels: map[string]string{"i": "7"}})
-	s.createTestDeployment(c, testRelease7.Name)
+	testDeployment7 := s.createTestDeployment(c, testRelease7.Name)
 	res = receiveDeploymentsStream(stream)
 	c.Assert(res, IsNil)
 	cancel()
@@ -1015,7 +1015,7 @@ func (s *S) TestStreamDeployments(c *C) {
 	stream, cancel = streamDeploymentsWithCancel(&protobuf.StreamDeploymentsRequest{TypeFilters: []protobuf.ReleaseType{protobuf.ReleaseType_CODE}, StreamCreates: true})
 	receiveDeploymentsStream(stream) // initial page
 	testRelease9 := s.createTestRelease(c, testApp3.Name, &protobuf.Release{Labels: map[string]string{"i": "9"}, Artifacts: testRelease3.Artifacts})
-	s.createTestDeployment(c, testRelease9.Name) // doesn't match TypeFilters
+	testDeployment9 := s.createTestDeployment(c, testRelease9.Name) // doesn't match TypeFilters
 	testRelease10 := s.createTestRelease(c, testApp3.Name, &protobuf.Release{Labels: map[string]string{"i": "10"}})
 	testDeployment10 := s.createTestDeployment(c, testRelease10.Name) // matches TypeFilters
 	res = receiveDeploymentsStream(stream)
@@ -1025,29 +1025,29 @@ func (s *S) TestStreamDeployments(c *C) {
 	cancel()
 
 	// test unary pagination
-	// res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 1})
-	// c.Assert(res, Not(IsNil))
-	// c.Assert(len(res.Deployments), Equals, 1)
-	// c.Assert(res.Deployments[0], DeepEquals, testDeployment9)
-	// c.Assert(receivedEOF, Equals, true)
-	// c.Assert(res.NextPageToken, Not(Equals), "")
-	// c.Assert(res.PageComplete, Equals, true)
-	// for i, testDeployment := range []*protobuf.Deployment{testDeployment8, testDeployment7, testDeployment6, testDeployment5, testDeployment4, testDeployment3} {
-	// 	comment := Commentf("iteraction %d", i)
-	// 	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 1, PageToken: res.NextPageToken})
-	// 	c.Assert(res, Not(IsNil), comment)
-	// 	c.Assert(len(res.Deployments), Equals, 1, comment)
-	// 	c.Assert(res.Deployments[0], DeepEquals, testDeployment, comment)
-	// 	c.Assert(receivedEOF, Equals, true, comment)
-	// 	c.Assert(res.NextPageToken, Not(Equals), "", comment)
-	// 	c.Assert(res.PageComplete, Equals, true, comment)
-	// }
-	// res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 2, PageToken: res.NextPageToken})
-	// c.Assert(res, Not(IsNil))
-	// c.Assert(len(res.Deployments), Equals, 2)
-	// c.Assert(res.Deployments[0], DeepEquals, testDeployment2)
-	// c.Assert(res.Deployments[1], DeepEquals, testDeployment1)
-	// c.Assert(receivedEOF, Equals, true)
-	// c.Assert(res.NextPageToken, Equals, "")
-	// c.Assert(res.PageComplete, Equals, true)
+	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 1})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 1)
+	c.Assert(res.Deployments[0], DeepEquals, testDeployment10)
+	c.Assert(receivedEOF, Equals, true)
+	c.Assert(res.NextPageToken, Not(Equals), "")
+	c.Assert(res.PageComplete, Equals, true)
+	for i, testDeployment := range []*protobuf.ExpandedDeployment{testDeployment9, testDeployment8, testDeployment7, testDeployment6, testDeployment5, testDeployment4, testDeployment3} {
+		comment := Commentf("iteraction %d", i)
+		res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 1, PageToken: res.NextPageToken})
+		c.Assert(res, Not(IsNil), comment)
+		c.Assert(len(res.Deployments), Equals, 1, comment)
+		c.Assert(res.Deployments[0], DeepEquals, testDeployment, comment)
+		c.Assert(receivedEOF, Equals, true, comment)
+		c.Assert(res.NextPageToken, Not(Equals), "", comment)
+		c.Assert(res.PageComplete, Equals, true, comment)
+	}
+	res, receivedEOF = unaryReceiveDeployments(&protobuf.StreamDeploymentsRequest{PageSize: 2, PageToken: res.NextPageToken})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Deployments), Equals, 2)
+	c.Assert(res.Deployments[0], DeepEquals, testDeployment2)
+	c.Assert(res.Deployments[1], DeepEquals, testDeployment1)
+	c.Assert(receivedEOF, Equals, true)
+	c.Assert(res.NextPageToken, Equals, "")
+	c.Assert(res.PageComplete, Equals, true)
 }
