@@ -204,6 +204,50 @@ func ConvertScaleRequest(ctScaleReq *ct.ScaleRequest) *protobuf.ScaleRequest {
 	}
 }
 
+func BackConvertScaleRequest(req *protobuf.ScaleRequest) *ct.ScaleRequest {
+	var newProcesses map[string]int
+	if req.NewProcesses != nil {
+		newProcesses = BackConvertDeploymentProcesses(req.NewProcesses)
+	}
+
+	var newTags map[string]map[string]string
+	if req.NewTags != nil {
+		newTags = BackConvertDeploymentTags(req.NewTags)
+	}
+
+	return &ct.ScaleRequest{
+		ID:           ParseIDFromName(req.Name, "scales"),
+		AppID:        ParseIDFromName(req.Parent, "apps"),
+		ReleaseID:    ParseIDFromName(req.Parent, "releases"),
+		State:        BackConvertScaleRequestState(req.State),
+		OldProcesses: BackConvertDeploymentProcesses(req.OldProcesses),
+		NewProcesses: &newProcesses,
+		OldTags:      BackConvertDeploymentTags(req.OldTags),
+		NewTags:      &newTags,
+		CreatedAt:    timestampFromProto(req.CreateTime),
+		UpdatedAt:    timestampFromProto(req.UpdateTime),
+	}
+}
+
+func BackConvertCreateScaleRequest(from *protobuf.CreateScaleRequest) *ct.ScaleRequest {
+	return BackConvertScaleRequest(&protobuf.ScaleRequest{
+		Parent:       from.Parent,
+		NewProcesses: from.Processes,
+		NewTags:      from.Tags,
+	})
+}
+
+func BackConvertScaleRequestState(from protobuf.ScaleRequestState) ct.ScaleRequestState {
+	to := ct.ScaleRequestStatePending
+	switch from {
+	case protobuf.ScaleRequestState_SCALE_CANCELLED:
+		to = ct.ScaleRequestStateCancelled
+	case protobuf.ScaleRequestState_SCALE_COMPLETE:
+		to = ct.ScaleRequestStateComplete
+	}
+	return to
+}
+
 func ConvertError(err error, message string, args ...interface{}) error {
 	errCode := codes.Unknown
 	if err == controller.ErrNotFound {
@@ -223,6 +267,17 @@ func ConvertDeploymentTags(from map[string]map[string]string) map[string]*protob
 	return to
 }
 
+func BackConvertDeploymentTags(from map[string]*protobuf.DeploymentProcessTags) map[string]map[string]string {
+	if from == nil {
+		return nil
+	}
+	to := make(map[string]map[string]string, len(from))
+	for k, v := range from {
+		to[k] = v.Tags
+	}
+	return to
+}
+
 func ConvertDeploymentProcesses(from map[string]int) map[string]int32 {
 	if from == nil {
 		return nil
@@ -230,6 +285,17 @@ func ConvertDeploymentProcesses(from map[string]int) map[string]int32 {
 	to := make(map[string]int32, len(from))
 	for k, v := range from {
 		to[k] = int32(v)
+	}
+	return to
+}
+
+func BackConvertDeploymentProcesses(from map[string]int32) map[string]int {
+	if from == nil {
+		return nil
+	}
+	to := make(map[string]int, len(from))
+	for k, v := range from {
+		to[k] = int(v)
 	}
 	return to
 }
