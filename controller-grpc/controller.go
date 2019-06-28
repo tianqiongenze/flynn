@@ -575,29 +575,6 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 		})
 	}
 
-	sendResponseWithDelay := func() func() {
-		d := 10 * time.Millisecond
-		incoming := make(chan struct{})
-
-		go func() {
-			t := time.NewTimer(d)
-			t.Stop()
-
-			for {
-				select {
-				case <-incoming:
-					t.Reset(d)
-				case <-t.C:
-					go sendResponse()
-				}
-			}
-		}()
-
-		return func() {
-			go func() { incoming <- struct{}{} }()
-		}
-	}()
-
 	unmarshalScaleRequest := func(event *ct.Event) (*protobuf.ScaleRequest, error) {
 		var ctReq *ct.ScaleRequest
 		if err := json.Unmarshal(event.Data, &ctReq); err != nil {
@@ -630,7 +607,14 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 	releaseIDs := utils.ParseIDsFromNameFilters(req.NameFilters, "releases")
 	scaleIDs := utils.ParseIDsFromNameFilters(req.NameFilters, "scales")
 
-	sub, err := s.subscribeEvents(appIDs, []ct.EventType{ct.EventTypeScaleRequest}, scaleIDs)
+	streamAppIDs := appIDs
+	streamScaleIDs := scaleIDs
+	if len(releaseIDs) > 0 {
+		// we can't filter releaseIDs in the subscription, so don't filter anything
+		streamAppIDs = nil
+		streamScaleIDs = nil
+	}
+	sub, err := s.subscribeEvents(streamAppIDs, []ct.EventType{ct.EventTypeScaleRequest}, streamScaleIDs)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
@@ -667,14 +651,27 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 		return nil
 	}
 
+	releaseIDsMap := make(map[string]struct{}, len(releaseIDs))
+	for _, releaseID := range releaseIDs {
+		releaseIDsMap[releaseID] = struct{}{}
+	}
+
+	appIDsMap := make(map[string]struct{}, len(appIDs))
+	for _, appID := range appIDs {
+		appIDsMap[appID] = struct{}{}
+	}
+
+	scaleIDsMap := make(map[string]struct{}, len(scaleIDs))
+	for _, scaleID := range scaleIDs {
+		scaleIDsMap[scaleID] = struct{}{}
+	}
+
 	// stream new events as they are created
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for {
-			sendResponseWithDelay()
-
 			event, ok := <-sub.Events
 			if !ok {
 				break
@@ -686,11 +683,48 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 			}
 			currID = event.ID
 
-			if err := prependScaleRequest(event); err != nil {
+			if !((req.StreamCreates && event.Op == ct.EventOpCreate) || (req.StreamUpdates && event.Op == ct.EventOpUpdate)) {
+				// EventOp doesn't match the stream type
+				continue
+			}
+
+			scale, err := unmarshalScaleRequest(event)
+			if err != nil {
 				// TODO(jvatic): Handle error
 				fmt.Printf("ScaleRequestsStream(%v): Error parsing data: %s\n", req.NameFilters, err)
 				continue
 			}
+
+			releaseIDMatches := false
+			if len(releaseIDsMap) > 0 {
+				if _, ok := releaseIDsMap[utils.ParseIDFromName(scale.Name, "releases")]; ok {
+					releaseIDMatches = true
+				}
+			}
+
+			appIDMatches := false
+			if len(appIDsMap) > 0 {
+				if _, ok := appIDsMap[utils.ParseIDFromName(scale.Name, "apps")]; ok {
+					appIDMatches = true
+				}
+			}
+
+			scaleIDMatches := false
+			if len(scaleIDsMap) > 0 {
+				if _, ok := scaleIDsMap[utils.ParseIDFromName(scale.Name, "scales")]; ok {
+					scaleIDMatches = true
+				}
+			}
+
+			if !(releaseIDMatches || appIDMatches || scaleIDMatches) {
+				if len(releaseIDsMap) > 0 || len(appIDsMap) > 0 || len(scaleIDsMap) > 0 {
+					continue
+				}
+			}
+
+			stream.Send(&protobuf.StreamScalesResponse{
+				ScaleRequests: []*protobuf.ScaleRequest{scale},
+			})
 		}
 	}()
 	wg.Wait()

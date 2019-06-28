@@ -220,6 +220,11 @@ func (s *S) createTestScaleRequest(c *C, req *protobuf.CreateScaleRequest) *prot
 	return utils.ConvertScaleRequest(ctReq)
 }
 
+func (s *S) updateTestScaleRequest(c *C, req *protobuf.ScaleRequest) {
+	ctReq := utils.BackConvertScaleRequest(req)
+	c.Assert(s.conf.formationRepo.UpdateScaleRequest(ctReq), IsNil)
+}
+
 func (s *S) TestOptionsRequest(c *C) { // grpc-web
 	req, err := http.NewRequest("OPTIONS", "http://localhost/grpc-web/fake", nil)
 	c.Assert(err, IsNil)
@@ -797,6 +802,7 @@ func (s *S) TestStreamScales(c *C) {
 	testScale4 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease4.Name, Processes: map[string]int32{"devnull": 2}})
 	testScale5 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease5.Name, Processes: map[string]int32{"devnull": 1}})
 	testScale6 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease6.Name, Processes: map[string]int32{"devnull": 2}})
+	testScale7 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease6.Name, Processes: map[string]int32{"devnull": 3}})
 
 	fmt.Println(testScale1.Name)
 	fmt.Println(testScale2.Name)
@@ -804,6 +810,7 @@ func (s *S) TestStreamScales(c *C) {
 	fmt.Println(testScale4.Name)
 	fmt.Println(testScale5.Name)
 	fmt.Println(testScale6.Name)
+	fmt.Println(testScale7.Name)
 
 	unaryReceiveScales := func(req *protobuf.StreamScalesRequest) (res *protobuf.StreamScalesResponse, receivedEOF bool) {
 		ctx, ctxCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -829,11 +836,27 @@ func (s *S) TestStreamScales(c *C) {
 		return
 	}
 
+	streamScalesWithCancel := func(req *protobuf.StreamScalesRequest) (protobuf.Controller_StreamScalesClient, context.CancelFunc) {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		stream, err := s.grpc.StreamScales(ctx, req)
+		c.Assert(err, IsNil)
+		return stream, cancel
+	}
+
+	receiveScalesStream := func(stream protobuf.Controller_StreamScalesClient) *protobuf.StreamScalesResponse {
+		res, err := stream.Recv()
+		if err == io.EOF || isErrCanceled(err) || isErrDeadlineExceeded(err) {
+			return nil
+		}
+		c.Assert(err, IsNil)
+		return res
+	}
+
 	// test fetching the latest scale
 	res, receivedEOF := unaryReceiveScales(&protobuf.StreamScalesRequest{PageSize: 1})
 	c.Assert(res, Not(IsNil))
 	c.Assert(len(res.ScaleRequests), Equals, 1)
-	c.Assert(res.ScaleRequests[0].Name, Equals, testScale6.Name)
+	c.Assert(res.ScaleRequests[0].Name, Equals, testScale7.Name)
 	c.Assert(receivedEOF, Equals, true)
 
 	// test fetching a single scale by name
@@ -858,20 +881,94 @@ func (s *S) TestStreamScales(c *C) {
 	c.Assert(receivedEOF, Equals, true)
 
 	// test fetching multiple scales by release name
+	res, receivedEOF = unaryReceiveScales(&protobuf.StreamScalesRequest{NameFilters: []string{testRelease6.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 2)
+	c.Assert(res.ScaleRequests[0].Name, Equals, testScale7.Name)
+	c.Assert(res.ScaleRequests[1].Name, Equals, testScale6.Name)
+	c.Assert(receivedEOF, Equals, true)
 
 	// test fetching multiple scales by app name
+	res, receivedEOF = unaryReceiveScales(&protobuf.StreamScalesRequest{NameFilters: []string{testApp1.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 2)
+	c.Assert(res.ScaleRequests[0].Name, Equals, testScale4.Name)
+	c.Assert(res.ScaleRequests[1].Name, Equals, testScale1.Name)
+	c.Assert(receivedEOF, Equals, true)
 
 	// test fetching multiple scales by a mixture of app name and release name
+	res, receivedEOF = unaryReceiveScales(&protobuf.StreamScalesRequest{NameFilters: []string{testApp1.Name, testRelease6.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 4)
+	c.Assert(res.ScaleRequests[0].Name, Equals, testScale7.Name)
+	c.Assert(res.ScaleRequests[1].Name, Equals, testScale6.Name)
+	c.Assert(res.ScaleRequests[2].Name, Equals, testScale4.Name)
+	c.Assert(res.ScaleRequests[3].Name, Equals, testScale1.Name)
+	c.Assert(receivedEOF, Equals, true)
 
 	// test streaming creates for specific release
+	stream, cancel := streamScalesWithCancel(&protobuf.StreamScalesRequest{NameFilters: []string{testRelease6.Name}, StreamCreates: true})
+	receiveScalesStream(stream) // initial page
+	testScale8 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease5.Name, Processes: map[string]int32{"devnull": 3}})
+	fmt.Println(testScale8.Name)
+	testScale9 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease6.Name, Processes: map[string]int32{"devnull": 0}})
+	fmt.Println(testScale9.Name)
+	res = receiveScalesStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 1)
+	c.Assert(res.ScaleRequests[0].Name, DeepEquals, testScale9.Name)
+	cancel()
+
+	// test streaming creates for specific app or release
+	stream, cancel = streamScalesWithCancel(&protobuf.StreamScalesRequest{NameFilters: []string{testApp1.Name, testRelease6.Name}, StreamCreates: true})
+	receiveScalesStream(stream)                                                                                                                    // initial page
+	testScale10 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease5.Name, Processes: map[string]int32{"devnull": 3}}) // neither
+	fmt.Println(testScale10.Name)
+	testScale11 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease6.Name, Processes: map[string]int32{"devnull": 0}}) // testRelease6 create
+	fmt.Println(testScale11.Name)
+	testScale4.State = protobuf.ScaleRequestState_SCALE_CANCELLED
+	s.updateTestScaleRequest(c, testScale4)                                                                                                        // testApp1 update
+	testScale12 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease1.Name, Processes: map[string]int32{"devnull": 0}}) // testApp1 create
+	fmt.Println(testScale12.Name)
+	res = receiveScalesStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 1)
+	c.Assert(res.ScaleRequests[0].Name, DeepEquals, testScale11.Name)
+	res = receiveScalesStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 1)
+	c.Assert(res.ScaleRequests[0].Name, DeepEquals, testScale12.Name)
+	cancel()
 
 	// test creates are not streamed when flag not set
-
-	// test streaming creates that don't match the NameFilters
+	stream, cancel = streamScalesWithCancel(&protobuf.StreamScalesRequest{})
+	receiveScalesStream(stream) // initial page
+	testScale13 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease6.Name, Processes: map[string]int32{"devnull": 3}})
+	fmt.Println(testScale13.Name)
+	res = receiveScalesStream(stream)
+	c.Assert(res, IsNil)
+	cancel()
 
 	// test streaming updates (new scale for the app/release)
-
-	// test streaming updates that don't match the NameFilters
+	stream, cancel = streamScalesWithCancel(&protobuf.StreamScalesRequest{NameFilters: []string{testApp1.Name, testRelease6.Name}, StreamUpdates: true})
+	receiveScalesStream(stream) // initial page
+	testScale14 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease4.Name, Processes: map[string]int32{"devnull": 3}})
+	fmt.Println(testScale14.Name)
+	testScale15 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease6.Name, Processes: map[string]int32{"devnull": 1}})
+	fmt.Println(testScale15.Name)
+	testScale6.State = protobuf.ScaleRequestState_SCALE_CANCELLED
+	s.updateTestScaleRequest(c, testScale6)
+	testScale4.State = protobuf.ScaleRequestState_SCALE_CANCELLED
+	s.updateTestScaleRequest(c, testScale4)
+	res = receiveScalesStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 1)
+	c.Assert(res.ScaleRequests[0].Name, DeepEquals, testScale6.Name)
+	res = receiveScalesStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 1)
+	c.Assert(res.ScaleRequests[0].Name, DeepEquals, testScale4.Name)
+	cancel()
 
 	// test unary pagination
 }
