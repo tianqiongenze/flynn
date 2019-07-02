@@ -971,6 +971,34 @@ func (s *S) TestStreamScales(c *C) {
 	cancel()
 
 	// test unary pagination
+	res, receivedEOF = unaryReceiveScales(&protobuf.StreamScalesRequest{PageSize: 20})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 15)
+	res, receivedEOF = unaryReceiveScales(&protobuf.StreamScalesRequest{PageSize: 1})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 1)
+	c.Assert(res.ScaleRequests[0].Name, DeepEquals, testScale15.Name)
+	c.Assert(receivedEOF, Equals, true)
+	c.Assert(res.NextPageToken, Not(Equals), "")
+	c.Assert(res.PageComplete, Equals, true)
+	for i, testScale := range []*protobuf.ScaleRequest{testScale14, testScale13, testScale12, testScale11, testScale10, testScale9, testScale8, testScale7, testScale6, testScale5, testScale4, testScale3} {
+		comment := Commentf("iteraction %d", i)
+		res, receivedEOF = unaryReceiveScales(&protobuf.StreamScalesRequest{PageSize: 1, PageToken: res.NextPageToken})
+		c.Assert(res, Not(IsNil), comment)
+		c.Assert(len(res.ScaleRequests), Equals, 1, comment)
+		c.Assert(res.ScaleRequests[0].Name, DeepEquals, testScale.Name, comment)
+		c.Assert(receivedEOF, Equals, true, comment)
+		c.Assert(res.NextPageToken, Not(Equals), "", comment)
+		c.Assert(res.PageComplete, Equals, true, comment)
+	}
+	res, receivedEOF = unaryReceiveScales(&protobuf.StreamScalesRequest{PageSize: 2, PageToken: res.NextPageToken})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 2)
+	c.Assert(res.ScaleRequests[0].Name, DeepEquals, testScale2.Name)
+	c.Assert(res.ScaleRequests[1].Name, DeepEquals, testScale1.Name)
+	c.Assert(receivedEOF, Equals, true)
+	c.Assert(res.NextPageToken, Equals, "")
+	c.Assert(res.PageComplete, Equals, true)
 }
 
 func (s *S) TestStreamDeployments(c *C) {

@@ -565,44 +565,6 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 		pageSize = pageToken.Size
 	}
 
-	var scaleRequests []*protobuf.ScaleRequest
-	var scaleRequestsMtx sync.RWMutex
-	sendResponse := func() {
-		scaleRequestsMtx.RLock()
-		defer scaleRequestsMtx.RUnlock()
-		stream.Send(&protobuf.StreamScalesResponse{
-			ScaleRequests: scaleRequests,
-		})
-	}
-
-	unmarshalScaleRequest := func(event *ct.Event) (*protobuf.ScaleRequest, error) {
-		var ctReq *ct.ScaleRequest
-		if err := json.Unmarshal(event.Data, &ctReq); err != nil {
-			// TODO(jvatic): return proper error code
-			return nil, err
-		}
-		return utils.ConvertScaleRequest(ctReq), nil
-	}
-
-	prependScaleRequest := func(event *ct.Event) error {
-		req, err := unmarshalScaleRequest(event)
-		if err != nil {
-			return err
-		}
-		scaleRequestsMtx.Lock()
-		_scaleRequests := make([]*protobuf.ScaleRequest, 0, len(scaleRequests)+1)
-		_scaleRequests = append(_scaleRequests, req)
-		for _, sr := range scaleRequests {
-			if sr.GetName() == req.GetName() {
-				continue
-			}
-			_scaleRequests = append(_scaleRequests, sr)
-		}
-		scaleRequests = _scaleRequests
-		scaleRequestsMtx.Unlock()
-		return nil
-	}
-
 	appIDs := utils.ParseIDsFromNameFilters(req.NameFilters, "apps")
 	releaseIDs := utils.ParseIDsFromNameFilters(req.NameFilters, "releases")
 	scaleIDs := utils.ParseIDsFromNameFilters(req.NameFilters, "scales")
@@ -622,30 +584,25 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 	defer sub.Close()
 
 	// get all events up until now
-	var currID int64
-	listEventsOptions := []data.ListEventsOption{
-		data.ListEventsOptionAppIDs(appIDs),
-		data.ListEventsOptionObjectTypes([]string{string(ct.EventTypeScaleRequest)}),
-		data.ListEventsOptionObjectIDs(scaleIDs),
-		data.ListEventsOptionObjectField("release", releaseIDs),
-		data.ListEventsOptionCount(pageSize),
-	}
-	list, err := s.eventRepo.ListEvents(listEventsOptions...)
+	list, nextPageToken, err := s.formationRepo.ListScaleRequests(data.ListScaleRequestOptions{
+		PageToken:  *pageToken,
+		AppIDs:     appIDs,
+		ReleaseIDs: releaseIDs,
+		ScaleIDs:   scaleIDs,
+	})
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
 	}
-	// list is in DESC order, so iterate in reverse
-	for i := len(list) - 1; i >= 0; i-- {
-		event := list[i]
-		currID = event.ID
-		if err := prependScaleRequest(event); err != nil {
-			// TODO(jvatic): Handle error
-			fmt.Printf("ScaleRequestsStream(%v): Error parsing data: %s\n", req.NameFilters, err)
-			continue
-		}
+	scaleRequests := make([]*protobuf.ScaleRequest, 0, len(list))
+	for _, ctScale := range list {
+		scaleRequests = append(scaleRequests, utils.ConvertScaleRequest(ctScale))
 	}
-	sendResponse()
+	stream.Send(&protobuf.StreamScalesResponse{
+		ScaleRequests: scaleRequests,
+		PageComplete:  true,
+		NextPageToken: nextPageToken.String(),
+	})
 
 	if unary {
 		return nil
@@ -666,7 +623,17 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 		scaleIDsMap[scaleID] = struct{}{}
 	}
 
+	unmarshalScaleRequest := func(event *ct.Event) (*protobuf.ScaleRequest, error) {
+		var ctReq *ct.ScaleRequest
+		if err := json.Unmarshal(event.Data, &ctReq); err != nil {
+			// TODO(jvatic): return proper error code
+			return nil, err
+		}
+		return utils.ConvertScaleRequest(ctReq), nil
+	}
+
 	// stream new events as they are created
+	var currID int64
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
