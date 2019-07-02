@@ -1,4 +1,5 @@
 import { grpc } from '@improbable-eng/grpc-web';
+import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 
 import Config from './config';
 import { ControllerClient, ServiceError, Status, ResponseStream } from './generated/controller_pb_service';
@@ -195,34 +196,49 @@ function buildStreamErrorHandler<T>(stream: ResponseStream<T>, cb: (error: Error
 	});
 }
 
+function compareTimestamps(a: Timestamp | undefined, b: Timestamp | undefined): 1 | 0 | -1 {
+	const ad = (a || new Timestamp()).toDate();
+	const bd = (b || new Timestamp()).toDate();
+	if (ad === bd) {
+		return 0;
+	}
+	if (ad > bd) {
+		return 1;
+	}
+	return -1;
+}
+
 const __memoizedStreams = {} as { [key: string]: ResponseStream<any> };
-const __memoizedStreamUsers = {} as { [key: string]: number };
+const __memoizedStreamN = {} as { [key: string]: number };
 const __memoizedStreamResponses = {} as { [key: string]: any };
 function memoizedStream<T>(
 	contextKey: string,
 	streamKey: string,
-	initStream: () => ResponseStream<T>
+	opts: { init: () => ResponseStream<T>; mergeResponses: (prev: T | null, res: T) => T }
 ): [ResponseStream<T>, T | undefined] {
 	const key = contextKey + streamKey;
 	function cleanup(streamEnded = false) {
-		const n = (__memoizedStreamUsers[key] = (__memoizedStreamUsers[key] || 0) - 1);
+		const n = (__memoizedStreamN[key] = (__memoizedStreamN[key] || 0) - 1);
 		if (n === 0 || streamEnded) {
 			delete __memoizedStreams[key];
-			delete __memoizedStreamUsers[key];
+			delete __memoizedStreamN[key];
 			delete __memoizedStreamResponses[key];
 		}
 		return n;
 	}
 
-	__memoizedStreamUsers[key] = (__memoizedStreamUsers[key] || 0) + 1;
+	__memoizedStreamN[key] = (__memoizedStreamN[key] || 0) + 1;
 
 	let stream = __memoizedStreams[key];
 	if (stream) {
 		return [stream as ResponseStream<T>, __memoizedStreamResponses[key] as T | undefined];
 	}
-	stream = initStream();
+	let dataCallbacks = [] as Array<(data: T) => void>;
+	stream = opts.init();
 	stream.on('data', (data: T) => {
+		data = opts.mergeResponses(__memoizedStreamResponses[key] || null, data);
 		__memoizedStreamResponses[key] = data;
+		dataCallbacks.forEach((cb) => cb(data));
 	});
 	let cancel = stream.cancel;
 	stream.on('end', () => {
@@ -234,8 +250,26 @@ function memoizedStream<T>(
 			cancel();
 		}
 	};
+	const s = {
+		on: (typ: string, handler: Function): ResponseStream<T> => {
+			switch (typ) {
+				case 'data':
+					dataCallbacks.push(handler as ((message: T) => void));
+					break;
+				case 'end':
+					stream.on('end', handler as (() => void));
+					break;
+				case 'status':
+					stream.on('status', handler as ((status: Status) => void));
+					break;
+				default:
+			}
+			return s;
+		},
+		cancel: stream.cancel
+	};
 	__memoizedStreams[key] = stream;
-	return [stream, undefined];
+	return [s, undefined];
 }
 
 class _Client implements Client {
@@ -246,10 +280,32 @@ class _Client implements Client {
 
 	public streamApps(cb: AppsCallback, ...reqModifiers: RequestModifier<StreamAppsRequest>[]): CancelFunc {
 		const streamKey = reqModifiers.map((m) => m.key).join(':');
-		const [stream, lastResponse] = memoizedStream('streamApps', streamKey, () => {
-			const req = new StreamReleasesRequest();
-			reqModifiers.forEach((m) => m(req));
-			return this._cc.streamApps(req);
+		const [stream, lastResponse] = memoizedStream('streamApps', streamKey, {
+			init: () => {
+				const req = new StreamReleasesRequest();
+				reqModifiers.forEach((m) => m(req));
+				return this._cc.streamApps(req);
+			},
+			mergeResponses: (prev: StreamAppsResponse | null, res: StreamAppsResponse): StreamAppsResponse => {
+				const appIndices = new Map<string, number>();
+				const apps = [] as App[];
+				(prev ? prev.getAppsList() : []).forEach((app, index) => {
+					appIndices.set(app.getName(), index);
+				});
+				res.getAppsList().forEach((app) => {
+					const index = appIndices.get(app.getName());
+					if (index !== undefined) {
+						apps[index] = app;
+					} else {
+						apps.push(app);
+					}
+				});
+				apps.sort((a, b) => {
+					return a.getDisplayName().localeCompare(b.getDisplayName());
+				});
+				res.setAppsList(apps);
+				return res;
+			}
 		});
 		stream.on('data', (response: StreamAppsResponse) => {
 			cb(response.getAppsList(), null);
@@ -265,10 +321,32 @@ class _Client implements Client {
 
 	public streamReleases(cb: ReleasesCallback, ...reqModifiers: RequestModifier<StreamReleasesRequest>[]): CancelFunc {
 		const streamKey = reqModifiers.map((m) => m.key).join(':');
-		const [stream, lastResponse] = memoizedStream('streamReleases', streamKey, () => {
-			const req = new StreamReleasesRequest();
-			reqModifiers.forEach((m) => m(req));
-			return this._cc.streamReleases(req);
+		const [stream, lastResponse] = memoizedStream('streamReleases', streamKey, {
+			init: () => {
+				const req = new StreamReleasesRequest();
+				reqModifiers.forEach((m) => m(req));
+				return this._cc.streamReleases(req);
+			},
+			mergeResponses: (prev: StreamReleasesResponse | null, res: StreamReleasesResponse): StreamReleasesResponse => {
+				const releaseIndices = new Map<string, number>();
+				const releases = [] as Release[];
+				(prev ? prev.getReleasesList() : []).forEach((release, index) => {
+					releaseIndices.set(release.getName(), index);
+				});
+				res.getReleasesList().forEach((release) => {
+					const index = releaseIndices.get(release.getName());
+					if (index !== undefined) {
+						releases[index] = release;
+					} else {
+						releases.push(release);
+					}
+				});
+				releases.sort((a, b) => {
+					return compareTimestamps(b.getCreateTime(), a.getCreateTime());
+				});
+				res.setReleasesList(releases);
+				return res;
+			}
 		});
 		stream.on('data', (response: StreamReleasesResponse) => {
 			cb(response.getReleasesList(), null);
@@ -284,10 +362,33 @@ class _Client implements Client {
 
 	public streamScales(cb: ScaleRequestsCallback, ...reqModifiers: RequestModifier<StreamScalesRequest>[]): CancelFunc {
 		const streamKey = reqModifiers.map((m) => m.key).join(':');
-		const [stream, lastResponse] = memoizedStream('streamScales', streamKey, () => {
-			const req = new StreamScalesRequest();
-			reqModifiers.forEach((m) => m(req));
-			return this._cc.streamScales(req);
+		const [stream, lastResponse] = memoizedStream('streamScales', streamKey, {
+			init: () => {
+				const req = new StreamScalesRequest();
+				reqModifiers.forEach((m) => m(req));
+				return this._cc.streamScales(req);
+			},
+			mergeResponses: (prev: StreamScalesResponse | null, res: StreamScalesResponse): StreamScalesResponse => {
+				const scaleIndices = new Map<string, number>();
+				const scales = [] as ScaleRequest[];
+				(prev ? prev.getScaleRequestsList() : []).forEach((scale, index) => {
+					scaleIndices.set(scale.getName(), index);
+					scales.push(scale);
+				});
+				res.getScaleRequestsList().forEach((scale) => {
+					const index = scaleIndices.get(scale.getName());
+					if (index !== undefined) {
+						scales[index] = scale;
+					} else {
+						scales.push(scale);
+					}
+				});
+				scales.sort((a, b) => {
+					return compareTimestamps(b.getUpdateTime(), a.getUpdateTime());
+				});
+				res.setScaleRequestsList(scales);
+				return res;
+			}
 		});
 		stream.on('data', (response: StreamScalesResponse) => {
 			cb(response.getScaleRequestsList(), null);
@@ -306,10 +407,37 @@ class _Client implements Client {
 		...reqModifiers: RequestModifier<StreamDeploymentsRequest>[]
 	): CancelFunc {
 		const streamKey = reqModifiers.map((m) => m.key).join(':');
-		const [stream, lastResponse] = memoizedStream('streamDeployments', streamKey, () => {
-			const req = new StreamDeploymentsRequest();
-			reqModifiers.forEach((m) => m(req));
-			return this._cc.streamDeployments(req);
+		const [stream, lastResponse] = memoizedStream('streamDeployments', streamKey, {
+			init: () => {
+				const req = new StreamDeploymentsRequest();
+				reqModifiers.forEach((m) => m(req));
+				return this._cc.streamDeployments(req);
+			},
+			mergeResponses: (
+				prev: StreamDeploymentsResponse | null,
+				res: StreamDeploymentsResponse
+			): StreamDeploymentsResponse => {
+				const deploymentIndices = new Map<string, number>();
+				const deployments = [] as ExpandedDeployment[];
+				(prev ? prev.getDeploymentsList() : []).forEach((deployment, index) => {
+					deploymentIndices.set(deployment.getName(), index);
+					deployments.push(deployment);
+				});
+				res.getDeploymentsList().forEach((deployment) => {
+					const index = deploymentIndices.get(deployment.getName());
+					if (index !== undefined) {
+						deployments[index] = deployment;
+					} else {
+						deployments.push(deployment);
+					}
+				});
+				res.setDeploymentsList(
+					deployments.sort((a, b) => {
+						return compareTimestamps(b.getCreateTime(), a.getCreateTime());
+					})
+				);
+				return res;
+			}
 		});
 		stream.on('data', (response: StreamDeploymentsResponse) => {
 			cb(response.getDeploymentsList(), null);
