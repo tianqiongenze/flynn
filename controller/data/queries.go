@@ -449,7 +449,7 @@ UPDATE scale_requests SET state = $2 WHERE scale_request_id = $1`
 	scaleRequestListQuery = `
 SELECT s.scale_request_id, s.app_id, s.release_id, s.state, s.old_processes, s.new_processes, s.old_tags, s.new_tags, s.created_at, s.updated_at
 FROM scale_requests s
-LEFT OUTER JOIN (SELECT scale_request_id, created_at FROM scale_requests WHERE scale_request_id = $4 LIMIT 1) AS before_s ON true
+LEFT OUTER JOIN (SELECT scale_request_id, created_at FROM scale_requests WHERE scale_request_id = $5 LIMIT 1) AS before_s ON true
 WHERE CASE
 	WHEN array_length($1::text[], 1) > 0 AND array_length($2::text[], 1) > 0 AND array_length($3::text[], 1) > 0
 		THEN s.scale_request_id::text = ANY($3::text[]) OR s.release_id::text = ANY($2::text[]) OR s.app_id::text = ANY($1::text[])
@@ -467,13 +467,18 @@ WHERE CASE
 		THEN s.scale_request_id::text = ANY($3::text[])
 	ELSE true
 END
+AND CASE
+	WHEN array_length($4::text[], 1) > 0
+		THEN s.state = ANY($4::text[])
+	ELSE true
+END
 AND CASE WHEN before_s IS NULL THEN true
 ELSE
 	s.created_at <= before_s.created_at
 	AND s.scale_request_id != before_s.scale_request_id
 END
 ORDER BY s.created_at DESC
-LIMIT $5
+LIMIT $6
 ` // TODO(jvatic): Optimize scaleRequestListQuery
 	jobListQuery = `
 SELECT

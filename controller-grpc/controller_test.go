@@ -804,6 +804,25 @@ func (s *S) TestStreamScales(c *C) {
 	testScale6 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease6.Name, Processes: map[string]int32{"devnull": 2}})
 	testScale7 := s.createTestScaleRequest(c, &protobuf.CreateScaleRequest{Parent: testRelease6.Name, Processes: map[string]int32{"devnull": 3}})
 
+	testScales := []*protobuf.ScaleRequest{
+		testScale1,
+		testScale2,
+		testScale3,
+		testScale3,
+		testScale4,
+		testScale5,
+		testScale6,
+		testScale7,
+	}
+	for _, scale := range testScales {
+		scale.State = protobuf.ScaleRequestState_SCALE_PENDING
+		s.updateTestScaleRequest(c, scale)
+	}
+	testScale2.State = protobuf.ScaleRequestState_SCALE_COMPLETE
+	s.updateTestScaleRequest(c, testScale2)
+	testScale4.State = protobuf.ScaleRequestState_SCALE_COMPLETE
+	s.updateTestScaleRequest(c, testScale4)
+
 	fmt.Println(testScale1.Name)
 	fmt.Println(testScale2.Name)
 	fmt.Println(testScale3.Name)
@@ -906,6 +925,14 @@ func (s *S) TestStreamScales(c *C) {
 	c.Assert(res.ScaleRequests[3].Name, Equals, testScale1.Name)
 	c.Assert(receivedEOF, Equals, true)
 
+	// test fetching multiple scales by state
+	res, receivedEOF = unaryReceiveScales(&protobuf.StreamScalesRequest{StateFilters: []protobuf.ScaleRequestState{protobuf.ScaleRequestState_SCALE_COMPLETE}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 2)
+	c.Assert(res.ScaleRequests[0].Name, Equals, testScale4.Name)
+	c.Assert(res.ScaleRequests[1].Name, Equals, testScale2.Name)
+	c.Assert(receivedEOF, Equals, true)
+
 	// test streaming creates for specific release
 	stream, cancel := streamScalesWithCancel(&protobuf.StreamScalesRequest{NameFilters: []string{testRelease6.Name}, StreamCreates: true})
 	receiveScalesStream(stream) // initial page
@@ -968,6 +995,19 @@ func (s *S) TestStreamScales(c *C) {
 	c.Assert(res, Not(IsNil))
 	c.Assert(len(res.ScaleRequests), Equals, 1)
 	c.Assert(res.ScaleRequests[0].Name, DeepEquals, testScale4.Name)
+	cancel()
+
+	// test streaming updates (new scale for the app/release) with state filters
+	stream, cancel = streamScalesWithCancel(&protobuf.StreamScalesRequest{StateFilters: []protobuf.ScaleRequestState{protobuf.ScaleRequestState_SCALE_CANCELLED}, StreamUpdates: true})
+	receiveScalesStream(stream) // initial page
+	testScale7.State = protobuf.ScaleRequestState_SCALE_PENDING
+	s.updateTestScaleRequest(c, testScale7)
+	testScale11.State = protobuf.ScaleRequestState_SCALE_CANCELLED
+	s.updateTestScaleRequest(c, testScale11)
+	res = receiveScalesStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.ScaleRequests), Equals, 1)
+	c.Assert(res.ScaleRequests[0].Name, DeepEquals, testScale11.Name)
 	cancel()
 
 	// test unary pagination

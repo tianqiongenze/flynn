@@ -584,11 +584,16 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 	defer sub.Close()
 
 	// get all events up until now
+	stateFilters := make([]ct.ScaleRequestState, 0, len(req.StateFilters))
+	for _, state := range req.StateFilters {
+		stateFilters = append(stateFilters, utils.BackConvertScaleRequestState(state))
+	}
 	list, nextPageToken, err := s.formationRepo.ListScaleRequests(data.ListScaleRequestOptions{
-		PageToken:  *pageToken,
-		AppIDs:     appIDs,
-		ReleaseIDs: releaseIDs,
-		ScaleIDs:   scaleIDs,
+		PageToken:    *pageToken,
+		AppIDs:       appIDs,
+		ReleaseIDs:   releaseIDs,
+		ScaleIDs:     scaleIDs,
+		StateFilters: stateFilters,
 	})
 	if err != nil {
 		// TODO(jvatic): return proper error code
@@ -606,6 +611,11 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 
 	if unary {
 		return nil
+	}
+
+	stateFilterMap := make(map[protobuf.ScaleRequestState]struct{}, len(req.StateFilters))
+	for _, state := range req.StateFilters {
+		stateFilterMap[state] = struct{}{}
 	}
 
 	releaseIDsMap := make(map[string]struct{}, len(releaseIDs))
@@ -660,6 +670,12 @@ func (s *server) StreamScales(req *protobuf.StreamScalesRequest, stream protobuf
 				// TODO(jvatic): Handle error
 				fmt.Printf("ScaleRequestsStream(%v): Error parsing data: %s\n", req.NameFilters, err)
 				continue
+			}
+
+			if len(stateFilterMap) > 0 {
+				if _, ok := stateFilterMap[scale.State]; !ok {
+					continue
+				}
 			}
 
 			releaseIDMatches := false
