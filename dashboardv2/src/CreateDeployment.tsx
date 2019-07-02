@@ -70,26 +70,17 @@ export default function CreateDeployment(props: Props) {
 	}
 
 	function createDeployment(release: Release, scale?: CreateScaleRequest) {
-		const { appName } = props;
 		let resolve: (deployment: Deployment) => void, reject: (error: Error) => void;
 		const p = new Promise((rs, rj) => {
 			resolve = rs;
 			reject = rj;
 		});
-		const cb = (deployment: Deployment, error: Error | null) => {
+		client.createDeployment(release.getName(), scale || null, (deployment: Deployment, error: Error | null) => {
 			if (error) {
 				reject(error);
 			}
 			resolve(deployment);
-		};
-		const createDeployment = scale
-			? () => {
-					return client.createDeploymentWithScale(appName, release.getName(), scale as CreateScaleRequest, cb);
-			  }
-			: () => {
-					return client.createDeployment(appName, release.getName(), cb);
-			  };
-		createDeployment();
+		});
 		return p;
 	}
 

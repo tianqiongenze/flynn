@@ -27,36 +27,20 @@ import {
 } from './generated/controller_pb';
 
 export interface Client {
+	// read API
 	streamApps: (cb: AppsCallback, ...reqModifiers: RequestModifier<StreamAppsRequest>[]) => CancelFunc;
-	streamApp: (name: string, cb: AppCallback) => CancelFunc;
-	updateApp: (app: App, cb: AppCallback) => CancelFunc;
 	streamReleases: (cb: ReleasesCallback, ...reqModifiers: RequestModifier<StreamReleasesRequest>[]) => CancelFunc;
-	streamAppRelease: (appName: string, cb: ReleaseCallback) => CancelFunc;
-	createScale: (req: CreateScaleRequest, cb: CreateScaleCallback) => CancelFunc;
 	streamScales: (cb: ScaleRequestsCallback, ...reqModifiers: RequestModifier<StreamScalesRequest>[]) => CancelFunc;
-	streamAppScales: (
-		appName: string,
-		cb: ScaleRequestsCallback,
-		...reqModifiers: RequestModifier<StreamScalesRequest>[]
-	) => CancelFunc;
-	getRelease: (name: string, cb: ReleaseCallback) => CancelFunc;
-	createRelease: (parentName: string, release: Release, cb: ReleaseCallback) => CancelFunc;
 	streamDeployments: (
 		cb: DeploymentsCallback,
 		...reqModifiers: RequestModifier<StreamDeploymentsRequest>[]
 	) => CancelFunc;
-	streamAppDeployments: (
-		appName: string,
-		cb: DeploymentsCallback,
-		...reqModifiers: RequestModifier<StreamDeploymentsRequest>[]
-	) => CancelFunc;
-	createDeployment: (parentName: string, releaseName: string, cb: DeploymentCallback) => CancelFunc;
-	createDeploymentWithScale: (
-		parentName: string,
-		releaseName: string,
-		sr: CreateScaleRequest,
-		cb: DeploymentCallback
-	) => CancelFunc;
+
+	// write API
+	updateApp: (app: App, cb: AppCallback) => CancelFunc;
+	createScale: (req: CreateScaleRequest, cb: CreateScaleCallback) => CancelFunc;
+	createRelease: (parentName: string, release: Release, cb: ReleaseCallback) => CancelFunc;
+	createDeployment: (parentName: string, scale: CreateScaleRequest | null, cb: DeploymentCallback) => CancelFunc;
 }
 
 export type ErrorWithCode = Error & ServiceError;
@@ -83,7 +67,7 @@ export interface PaginatableRequest {
 	setPageToken(value: string): void;
 }
 
-export function setRequestPageSize(pageSize: number): RequestModifier<PaginatableRequest> {
+export function setPageSize(pageSize: number): RequestModifier<PaginatableRequest> {
 	return Object.assign(
 		(req: PaginatableRequest) => {
 			req.setPageSize(pageSize);
@@ -99,12 +83,38 @@ export interface NameFilterable {
 	addNameFilters(value: string, index?: number): string;
 }
 
-export function filterRequestByName(...filterNames: string[]): RequestModifier<NameFilterable> {
+export function setNameFilters(...filterNames: string[]): RequestModifier<NameFilterable> {
 	return Object.assign(
 		(req: NameFilterable) => {
 			req.setNameFiltersList(filterNames);
 		},
 		{ key: `nameFilters--${filterNames.join('|')}` }
+	);
+}
+
+export interface CreateStreamable {
+	setStreamCreates(value: boolean): void;
+}
+
+export function setStreamCreates(): RequestModifier<CreateStreamable> {
+	return Object.assign(
+		(req: CreateStreamable) => {
+			req.setStreamCreates(true);
+		},
+		{ key: 'streamCreates' }
+	);
+}
+
+export interface UpdateStreamable {
+	setStreamUpdates(value: boolean): void;
+}
+
+export function setStreamUpdates(): RequestModifier<UpdateStreamable> {
+	return Object.assign(
+		(req: UpdateStreamable) => {
+			req.setStreamUpdates(true);
+		},
+		{ key: 'streamUpdates' }
 	);
 }
 
@@ -253,33 +263,6 @@ class _Client implements Client {
 		return buildCancelFunc(stream);
 	}
 
-	public streamApp(name: string, cb: AppCallback): CancelFunc {
-		return this.streamApps(
-			(apps: App[], error: ErrorWithCode | null) => {
-				cb(apps[0] || new App(), error);
-			},
-			filterRequestByName(name),
-			setRequestPageSize(1)
-		);
-	}
-
-	public updateApp(app: App, cb: AppCallback): CancelFunc {
-		// TODO(jvatic): implement update_mask to include only changed fields
-		const req = new UpdateAppRequest();
-		req.setApp(app);
-		return buildCancelFunc(
-			this._cc.updateApp(req, (error: ServiceError | null, response: App | null) => {
-				if (response && error === null) {
-					cb(response, null);
-				} else if (error) {
-					cb(new App(), convertServiceError(error));
-				} else {
-					cb(new App(), UnknownError);
-				}
-			})
-		);
-	}
-
 	public streamReleases(cb: ReleasesCallback, ...reqModifiers: RequestModifier<StreamReleasesRequest>[]): CancelFunc {
 		const streamKey = reqModifiers.map((m) => m.key).join(':');
 		const [stream, lastResponse] = memoizedStream('streamReleases', streamKey, () => {
@@ -299,30 +282,6 @@ class _Client implements Client {
 		return buildCancelFunc(stream);
 	}
 
-	public streamAppRelease(appName: string, cb: ReleaseCallback): CancelFunc {
-		return this.streamReleases(
-			(releases: Release[], error: ErrorWithCode | null) => {
-				cb(releases[0] || new Release(), error);
-			},
-			filterRequestByName(appName),
-			setRequestPageSize(1)
-		);
-	}
-
-	public createScale(req: CreateScaleRequest, cb: CreateScaleCallback): CancelFunc {
-		return buildCancelFunc(
-			this._cc.createScale(req, (error: ServiceError | null, response: ScaleRequest | null) => {
-				if (response && error === null) {
-					cb(response, null);
-				} else if (error) {
-					cb(new ScaleRequest(), convertServiceError(error));
-				} else {
-					cb(new ScaleRequest(), UnknownError);
-				}
-			})
-		);
-	}
-
 	public streamScales(cb: ScaleRequestsCallback, ...reqModifiers: RequestModifier<StreamScalesRequest>[]): CancelFunc {
 		const streamKey = reqModifiers.map((m) => m.key).join(':');
 		const [stream, lastResponse] = memoizedStream('streamScales', streamKey, () => {
@@ -340,48 +299,6 @@ class _Client implements Client {
 			cb([], error);
 		});
 		return buildCancelFunc(stream);
-	}
-
-	public streamAppScales(
-		appName: string,
-		cb: ScaleRequestsCallback,
-		...reqModifiers: RequestModifier<StreamScalesRequest>[]
-	): CancelFunc {
-		return this.streamScales(cb, filterRequestByName(appName));
-	}
-
-	public getRelease(name: string, cb: ReleaseCallback): CancelFunc {
-		const cancel = this.streamReleases(
-			(releases: Release[], error: ErrorWithCode | null) => {
-				const release = releases[0];
-				if (release) {
-					cancel();
-					cb(release, error);
-				} else {
-					cb(new Release(), error);
-				}
-			},
-			filterRequestByName(name),
-			setRequestPageSize(1)
-		);
-		return cancel;
-	}
-
-	public createRelease(parentName: string, release: Release, cb: ReleaseCallback): CancelFunc {
-		const req = new CreateReleaseRequest();
-		req.setParent(parentName);
-		req.setRelease(release);
-		return buildCancelFunc(
-			this._cc.createRelease(req, (error: ServiceError | null, response: Release | null) => {
-				if (response && error === null) {
-					cb(response, null);
-				} else if (error) {
-					cb(new Release(), convertServiceError(error));
-				} else {
-					cb(new Release(), UnknownError);
-				}
-			})
-		);
 	}
 
 	public streamDeployments(
@@ -406,35 +323,61 @@ class _Client implements Client {
 		return buildCancelFunc(stream);
 	}
 
-	public streamAppDeployments(
-		appName: string,
-		cb: DeploymentsCallback,
-		...reqModifiers: RequestModifier<StreamDeploymentsRequest>[]
-	): CancelFunc {
-		return this.streamDeployments(cb, filterRequestByName(appName));
+	public updateApp(app: App, cb: AppCallback): CancelFunc {
+		// TODO(jvatic): implement update_mask to include only changed fields
+		const req = new UpdateAppRequest();
+		req.setApp(app);
+		return buildCancelFunc(
+			this._cc.updateApp(req, (error: ServiceError | null, response: App | null) => {
+				if (response && error === null) {
+					cb(response, null);
+				} else if (error) {
+					cb(new App(), convertServiceError(error));
+				} else {
+					cb(new App(), UnknownError);
+				}
+			})
+		);
 	}
 
-	public createDeployment(parentName: string, releaseName: string, cb: DeploymentCallback): CancelFunc {
+	public createScale(req: CreateScaleRequest, cb: CreateScaleCallback): CancelFunc {
+		return buildCancelFunc(
+			this._cc.createScale(req, (error: ServiceError | null, response: ScaleRequest | null) => {
+				if (response && error === null) {
+					cb(response, null);
+				} else if (error) {
+					cb(new ScaleRequest(), convertServiceError(error));
+				} else {
+					cb(new ScaleRequest(), UnknownError);
+				}
+			})
+		);
+	}
+
+	public createRelease(parentName: string, release: Release, cb: ReleaseCallback): CancelFunc {
+		const req = new CreateReleaseRequest();
+		req.setParent(parentName);
+		req.setRelease(release);
+		return buildCancelFunc(
+			this._cc.createRelease(req, (error: ServiceError | null, response: Release | null) => {
+				if (response && error === null) {
+					cb(response, null);
+				} else if (error) {
+					cb(new Release(), convertServiceError(error));
+				} else {
+					cb(new Release(), UnknownError);
+				}
+			})
+		);
+	}
+
+	public createDeployment(parentName: string, scale: CreateScaleRequest | null, cb: DeploymentCallback): CancelFunc {
 		const req = new CreateDeploymentRequest();
 		req.setParent(parentName);
-		req.setRelease(releaseName);
-		return this._createDeployment(req, cb);
-	}
+		if (scale) {
+			req.setScaleRequest(scale);
+		}
 
-	public createDeploymentWithScale(
-		parentName: string,
-		releaseName: string,
-		sr: CreateScaleRequest,
-		cb: DeploymentCallback
-	): CancelFunc {
-		const req = new CreateDeploymentRequest();
-		req.setParent(parentName);
-		req.setRelease(releaseName);
-		req.setScaleRequest(sr);
-		return this._createDeployment(req, cb);
-	}
-
-	private _createDeployment(req: CreateDeploymentRequest, cb: DeploymentCallback): CancelFunc {
 		let deployment = null as Deployment | null;
 		const stream = this._cc.createDeployment(req);
 		stream.on('data', (event: DeploymentEvent) => {

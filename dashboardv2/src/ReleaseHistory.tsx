@@ -11,8 +11,9 @@ import RightOverlay from './RightOverlay';
 import { default as useRouter, UseRouterObejct } from './useRouter';
 import useApp from './useApp';
 import useAppScale from './useAppScale';
+import useAppScales from './useAppScales';
 import useErrorHandler from './useErrorHandler';
-import { listDeploymentsRequestFilterType } from './client';
+import { listDeploymentsRequestFilterType, setNameFilters } from './client';
 import { ClientContext } from './withClient';
 import {
 	Release,
@@ -32,13 +33,13 @@ import protoMapReplace from './util/protoMapReplace';
 
 function mapHistory<T>(
 	deployments: ExpandedDeployment[],
-	scaleRequests: ScaleRequest[],
+	scales: ScaleRequest[],
 	rfn: (key: string, releases: [Release, Release | null], index: number) => T,
 	sfn: (key: string, scaleRequest: ScaleRequest, index: number) => T
 ): T[] {
 	const res = [] as T[];
 	const dlen = deployments.length;
-	const slen = scaleRequests.length;
+	const slen = scales.length;
 	let i = 0;
 	let di = 0;
 	let si = 0;
@@ -47,7 +48,7 @@ function mapHistory<T>(
 		let r = d ? d.getNewRelease() || null : null;
 		let pr = d ? d.getOldRelease() || null : null;
 		const dt = d ? (d.getCreateTime() as timestamp_pb.Timestamp).toDate() : null;
-		const s = scaleRequests[si];
+		const s = scales[si];
 		const st = s ? (s.getCreateTime() as timestamp_pb.Timestamp).toDate() : null;
 		if ((dt && st && dt > st) || (dt && !st)) {
 			res.push(rfn(d.getName(), [r as Release, pr], i));
@@ -307,8 +308,7 @@ export default function ReleaseHistory({ appName }: Props) {
 				filterType = ReleaseType.CONFIG;
 			}
 
-			const cancel = client.streamAppDeployments(
-				appName,
+			const cancel = client.streamDeployments(
 				(deployments: ExpandedDeployment[], error: Error | null) => {
 					if (error) {
 						handleError(error);
@@ -318,6 +318,7 @@ export default function ReleaseHistory({ appName }: Props) {
 					setDeployments(deployments);
 					setDeploymentsLoading(false);
 				},
+				setNameFilters(appName),
 				listDeploymentsRequestFilterType(filterType)
 			);
 			return cancel;
@@ -326,28 +327,14 @@ export default function ReleaseHistory({ appName }: Props) {
 	);
 
 	// Get scale requests
-	const [scaleRequests, setScaleRequests] = React.useState<ScaleRequest[]>([]);
-	const [scaleRequestsLoading, setScaleRequestsLoading] = React.useState(isScaleEnabled);
+	const { scales, loading: scalesLoading, error: scalesError } = useAppScales(appName, isScaleEnabled);
 	React.useEffect(
 		() => {
-			if (!isScaleEnabled) {
-				setScaleRequestsLoading(false);
-				return;
+			if (scalesError) {
+				handleError(scalesError);
 			}
-
-			// TODO(jvatic): use client.streamScales
-			const cancel = client.streamAppScales(appName, (scaleRequests: ScaleRequest[], error: Error | null) => {
-				if (error) {
-					handleError(error);
-					return;
-				}
-
-				setScaleRequests(scaleRequests);
-				setScaleRequestsLoading(false);
-			});
-			return cancel;
 		},
-		[appName, client, handleError, isScaleEnabled]
+		[handleError, scalesError]
 	);
 
 	// Get current formation
@@ -372,7 +359,7 @@ export default function ReleaseHistory({ appName }: Props) {
 			if (isDeploying) return;
 
 			if (selectedResourceType === SelectedResourceType.ScaleRequest) {
-				const sr = scaleRequests.find((sr) => sr.getName() === selectedItemName);
+				const sr = scales.find((sr) => sr.getName() === selectedItemName);
 				if (sr) {
 					const diff = protoMapDiff((currentScale as ScaleRequest).getNewProcessesMap(), sr.getNewProcessesMap());
 					setSelectedScaleRequestDiff(diff);
@@ -381,7 +368,7 @@ export default function ReleaseHistory({ appName }: Props) {
 			}
 			setSelectedScaleRequestDiff([]);
 		},
-		[currentScale, isDeploying, scaleRequests, selectedItemName, selectedResourceType]
+		[currentScale, isDeploying, scales, selectedItemName, selectedResourceType]
 	);
 
 	const [nextScale, setNextFormation] = React.useState<CreateScaleRequest | null>(null);
@@ -395,7 +382,7 @@ export default function ReleaseHistory({ appName }: Props) {
 
 		if (selectedResourceType === SelectedResourceType.ScaleRequest) {
 			// It's a scale request we're deploying
-			const sr = scaleRequests.find((sr) => sr.getName() === selectedItemName);
+			const sr = scales.find((sr) => sr.getName() === selectedItemName);
 			const nextScale = new CreateScaleRequest();
 			if (!sr) {
 				return;
@@ -432,7 +419,7 @@ export default function ReleaseHistory({ appName }: Props) {
 		setNextFormation(null);
 	};
 
-	if (deploymentsLoading || scaleRequestsLoading || currentScaleLoading || appLoading) {
+	if (deploymentsLoading || scalesLoading || currentScaleLoading || appLoading) {
 		return <Loading />;
 	}
 
@@ -475,7 +462,7 @@ export default function ReleaseHistory({ appName }: Props) {
 				<Box tag="ul">
 					{mapHistory(
 						deployments,
-						isScaleEnabled ? scaleRequests : [],
+						isScaleEnabled ? scales : [],
 						(key, [r, p]) => (
 							<ReleaseHistoryRelease
 								key={key}

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import useClient from './useClient';
 import { App, StreamAppsRequest } from './generated/controller_pb';
-import { RequestModifier } from './client';
+import { RequestModifier, setStreamCreates, setStreamUpdates } from './client';
 
 const emptyReqModifiersArray = [] as RequestModifier<StreamAppsRequest>[];
 
@@ -17,15 +17,20 @@ export default function useAppsList(reqModifiers: RequestModifier<StreamAppsRequ
 		() => {
 			setAppsLoading(true);
 			setApps([]);
-			const cancel = client.streamApps((apps: App[], error: Error | null) => {
-				setAppsLoading(false);
-				if (error) {
-					setError(error);
-					return;
-				}
-				setApps(apps);
-				setError(null);
-			}, ...reqModifiers);
+			const cancel = client.streamApps(
+				(apps: App[], error: Error | null) => {
+					setAppsLoading(false);
+					if (error) {
+						setError(error);
+						return;
+					}
+					setApps(apps);
+					setError(null);
+				},
+				setStreamCreates(),
+				setStreamUpdates(),
+				...reqModifiers
+			);
 			return cancel;
 		},
 		[client, reqModifiers]

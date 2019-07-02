@@ -1,6 +1,6 @@
 import * as React from 'react';
 import useClient from './useClient';
-import { filterRequestByName, filterScalesByState } from './client';
+import { setNameFilters, filterScalesByState, setPageSize, setStreamCreates } from './client';
 import { ScaleRequest, ScaleRequestState } from './generated/controller_pb';
 
 export default function useAppScale(appName: string) {
@@ -16,16 +16,22 @@ export default function useAppScale(appName: string) {
 						setError(error);
 						return;
 					}
+					let scale;
 					if (scales.length === 0) {
-						// TODO(jvatic): set an empty one
+						scale = new ScaleRequest();
+						scale.setState(ScaleRequestState.SCALE_COMPLETE);
 						return;
+					} else {
+						scale = scales[0];
 					}
-					setScale(scales[0]);
+					setScale(scale);
 					setLoading(false);
 					setError(null);
 				},
-				filterRequestByName(appName),
-				filterScalesByState(ScaleRequestState.SCALE_COMPLETE)
+				setNameFilters(appName),
+				filterScalesByState(ScaleRequestState.SCALE_COMPLETE),
+				setPageSize(1),
+				setStreamCreates()
 			);
 			return cancel;
 		},

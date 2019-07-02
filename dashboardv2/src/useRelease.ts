@@ -1,5 +1,6 @@
 import * as React from 'react';
 import useClient from './useClient';
+import { setNameFilters, setPageSize } from './client';
 import { Release } from './generated/controller_pb';
 
 export default function useRelease(releaseName: string) {
@@ -17,15 +18,19 @@ export default function useRelease(releaseName: string) {
 				setError(null);
 				return;
 			}
-			const cancel = client.getRelease(releaseName, (release: Release, error: Error | null) => {
-				setIsLoading(false);
-				if (error) {
-					setError(error);
-					return;
-				}
-				setRelease(release);
-				setError(null);
-			});
+			const cancel = client.streamReleases(
+				(releases: Release[], error: Error | null) => {
+					setIsLoading(false);
+					if (error) {
+						setError(error);
+						return;
+					}
+					setRelease(releases[0] || new Release());
+					setError(null);
+				},
+				setNameFilters(releaseName),
+				setPageSize(1)
+			);
 			return cancel;
 		},
 		[releaseName, client]
