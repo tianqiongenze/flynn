@@ -390,6 +390,21 @@ func (s *server) StreamApps(req *protobuf.StreamAppsRequest, stream protobuf.Con
 		return nil
 	}
 
+	maybeSendApp := func(event *ct.Event, app *protobuf.App) {
+		shouldSend := false
+		if (req.StreamCreates && event.Op == ct.EventOpCreate) || (req.StreamUpdates && event.Op == ct.EventOpUpdate) {
+			shouldSend = true
+		}
+		if !protobuf.MatchLabelFilters(app.Labels, req.GetLabelFilters()) {
+			shouldSend = false
+		}
+		if shouldSend {
+			stream.Send(&protobuf.StreamAppsResponse{
+				Apps: []*protobuf.App{app},
+			})
+		}
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -407,19 +422,7 @@ func (s *server) StreamApps(req *protobuf.StreamAppsRequest, stream protobuf.Con
 					fmt.Printf("StreamApps: Error unmarshalling event.Data -> App: %s\n", err)
 					continue
 				}
-				app := utils.ConvertApp(ctApp)
-				shouldSend := false
-				if (req.StreamCreates && event.Op == ct.EventOpCreate) || (req.StreamUpdates && event.Op == ct.EventOpUpdate) {
-					shouldSend = true
-				}
-				if !protobuf.MatchLabelFilters(app.Labels, req.GetLabelFilters()) {
-					shouldSend = false
-				}
-				if shouldSend {
-					stream.Send(&protobuf.StreamAppsResponse{
-						Apps: []*protobuf.App{app},
-					})
-				}
+				maybeSendApp(event, utils.ConvertApp(ctApp))
 			case ct.EventTypeAppDeletion:
 				if !req.StreamUpdates {
 					continue
@@ -429,7 +432,14 @@ func (s *server) StreamApps(req *protobuf.StreamAppsRequest, stream protobuf.Con
 				if !req.StreamUpdates {
 					continue
 				}
-				// TODO(jvatic)
+				ctApp, err := s.appRepo.Get(event.AppID)
+				if err != nil {
+					// TODO(jvatic): Handle error
+					fmt.Printf("StreamApps: Error getting App(%s): %s\n", event.AppID, err)
+					continue
+				}
+				(ctApp.(*ct.App)).ReleaseID = event.ObjectID
+				maybeSendApp(event, utils.ConvertApp(ctApp.(*ct.App)))
 			}
 		}
 	}()
