@@ -12,12 +12,10 @@ import {
 	CreateReleaseRequest,
 	Release,
 	ReleaseTypeMap,
-	StreamFormationsRequest,
-	StreamFormationsResponse,
-	Formation,
 	ScaleRequest,
 	StreamScalesRequest,
 	StreamScalesResponse,
+	ScaleRequestStateMap,
 	CreateScaleRequest,
 	CreateDeploymentRequest,
 	Deployment,
@@ -34,8 +32,6 @@ export interface Client {
 	updateApp: (app: App, cb: AppCallback) => CancelFunc;
 	streamReleases: (cb: ReleasesCallback, ...reqModifiers: RequestModifier<StreamReleasesRequest>[]) => CancelFunc;
 	streamAppRelease: (appName: string, cb: ReleaseCallback) => CancelFunc;
-	streamFormations: (cb: FormationsCallback, ...reqModifiers: RequestModifier<StreamFormationsRequest>[]) => CancelFunc;
-	streamAppFormation: (appName: string, cb: FormationCallback) => CancelFunc;
 	createScale: (req: CreateScaleRequest, cb: CreateScaleCallback) => CancelFunc;
 	streamScales: (cb: ScaleRequestsCallback, ...reqModifiers: RequestModifier<StreamScalesRequest>[]) => CancelFunc;
 	streamAppScales: (
@@ -68,11 +64,9 @@ export type CancelFunc = () => void;
 export type AppsCallback = (apps: App[], error: ErrorWithCode | null) => void;
 export type AppCallback = (app: App, error: ErrorWithCode | null) => void;
 export type ReleasesCallback = (releases: Release[], error: ErrorWithCode | null) => void;
-export type FormationsCallback = (formations: Formation[], error: ErrorWithCode | null) => void;
 export type CreateScaleCallback = (sr: ScaleRequest, error: ErrorWithCode | null) => void;
 export type ReleaseCallback = (release: Release, error: ErrorWithCode | null) => void;
 export type DeploymentCallback = (deployment: Deployment, error: ErrorWithCode | null) => void;
-export type FormationCallback = (formation: Formation, error: ErrorWithCode | null) => void;
 export type ScaleRequestsCallback = (scaleRequests: ScaleRequest[], error: ErrorWithCode | null) => void;
 export type DeploymentsCallback = (deployments: ExpandedDeployment[], error: ErrorWithCode | null) => void;
 
@@ -139,6 +133,17 @@ export function excludeAppsWithLabels(labels: [string, string][]): RequestModifi
 			});
 		},
 		{ key: `excludeAppsWithLabels--${JSON.stringify(labels)}` }
+	);
+}
+
+export function filterScalesByState(
+	...stateFilters: Array<ScaleRequestStateMap[keyof ScaleRequestStateMap]>
+): RequestModifier<StreamScalesRequest> {
+	return Object.assign(
+		(req: StreamScalesRequest) => {
+			req.setStateFiltersList(stateFilters);
+		},
+		{ key: `stateFilters--${JSON.stringify(stateFilters)}` }
 	);
 }
 
@@ -298,38 +303,6 @@ class _Client implements Client {
 		return this.streamReleases(
 			(releases: Release[], error: ErrorWithCode | null) => {
 				cb(releases[0] || new Release(), error);
-			},
-			filterRequestByName(appName),
-			setRequestPageSize(1)
-		);
-	}
-
-	public streamFormations(
-		cb: FormationsCallback,
-		...reqModifiers: RequestModifier<StreamFormationsRequest>[]
-	): CancelFunc {
-		const streamKey = reqModifiers.map((m) => m.key).join(':');
-		const [stream, lastResponse] = memoizedStream('streamFormations', streamKey, () => {
-			const req = new StreamFormationsRequest();
-			reqModifiers.forEach((m) => m(req));
-			return this._cc.streamFormations(req);
-		});
-		stream.on('data', (response: StreamFormationsResponse) => {
-			cb(response.getFormationsList(), null);
-		});
-		if (lastResponse) {
-			cb(lastResponse.getFormationsList(), null);
-		}
-		buildStreamErrorHandler(stream, (error: ErrorWithCode) => {
-			cb([], error);
-		});
-		return buildCancelFunc(stream);
-	}
-
-	public streamAppFormation(appName: string, cb: FormationCallback): CancelFunc {
-		return this.streamFormations(
-			(formations: Formation[], error: ErrorWithCode | null) => {
-				cb(formations[0] || new Formation(), error);
 			},
 			filterRequestByName(appName),
 			setRequestPageSize(1)

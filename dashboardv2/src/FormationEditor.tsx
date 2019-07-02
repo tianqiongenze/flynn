@@ -3,7 +3,7 @@ import * as jspb from 'google-protobuf';
 import { Box, Button, Text } from 'grommet';
 
 import useClient from './useClient';
-import useAppFormation from './useAppFormation';
+import useAppScale from './useAppScale';
 import useNavProtection from './useNavProtection';
 import useErrorHandler from './useErrorHandler';
 import Loading from './Loading';
@@ -11,7 +11,7 @@ import ProcessScale from './ProcessScale';
 import ProcessesDiff from './ProcessesDiff';
 import protoMapDiff, { applyProtoMapDiff, Diff } from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
-import { Formation, ScaleRequest, ScaleRequestState, CreateScaleRequest } from './generated/controller_pb';
+import { ScaleRequest, ScaleRequestState, CreateScaleRequest } from './generated/controller_pb';
 
 function buildProcessesArray(m: jspb.Map<string, number>): [string, number][] {
 	return Array.from(m.getEntryList()).sort(([ak, av]: [string, number], [bk, bv]: [string, number]) => {
@@ -26,7 +26,7 @@ interface Props {
 export default function FormationEditor({ appName }: Props) {
 	const handleError = useErrorHandler();
 	const client = useClient();
-	const { formation, loading: isLoading, error: formationError } = useAppFormation(appName);
+	const { scale, loading: isLoading, error: scaleError } = useAppScale(appName);
 	const [initialProcesses, setInitialProcesses] = React.useState<jspb.Map<string, number>>(
 		new jspb.Map<string, number>([])
 	);
@@ -39,11 +39,11 @@ export default function FormationEditor({ appName }: Props) {
 
 	React.useEffect(
 		() => {
-			if (formationError) {
-				handleError(formationError);
+			if (scaleError) {
+				handleError(scaleError);
 			}
 		},
-		[formationError, handleError]
+		[scaleError, handleError]
 	);
 
 	const [enableNavProtection, disableNavProtection] = useNavProtection();
@@ -60,18 +60,18 @@ export default function FormationEditor({ appName }: Props) {
 
 	React.useEffect(
 		() => {
-			if (!formation) return;
+			if (!scale) return;
 
 			// preserve changes
-			let processesMap = formation.getProcessesMap();
+			let processesMap = scale.getNewProcessesMap();
 			if (hasChanges) {
 				processesMap = applyProtoMapDiff(processesMap, processesDiff);
 			}
 
 			setProcesses(buildProcessesArray(processesMap));
-			setInitialProcesses(formation.getProcessesMap());
+			setInitialProcesses(scale.getNewProcessesMap());
 		},
-		[formation] // eslint-disable-line react-hooks/exhaustive-deps
+		[scale] // eslint-disable-line react-hooks/exhaustive-deps
 	);
 
 	// set `processesDiff`, `processesFullDiff`, and `hasChanges` when
@@ -86,11 +86,11 @@ export default function FormationEditor({ appName }: Props) {
 	);
 
 	// used to render diff
-	const nextFormation = React.useMemo(
+	const nextScale = React.useMemo(
 		() => {
-			const f = new Formation();
-			protoMapReplace(f.getProcessesMap(), new jspb.Map(processes));
-			return f;
+			const s = new CreateScaleRequest();
+			protoMapReplace(s.getProcessesMap(), new jspb.Map(processes));
+			return s;
 		},
 		[processes]
 	);
@@ -113,15 +113,15 @@ export default function FormationEditor({ appName }: Props) {
 		e.preventDefault();
 
 		// build new formation object with new processes map
-		if (!formation) return; // should never be null at this point
+		if (!scale) return; // should never be null at this point
 
 		setIsConfirming(false);
 		setIsCreating(true);
 
 		const req = new CreateScaleRequest();
-		req.setParent(formation.getParent());
+		req.setParent(scale.getParent());
 		protoMapReplace(req.getProcessesMap(), new jspb.Map(processes));
-		protoMapReplace(req.getTagsMap(), formation.getTagsMap());
+		protoMapReplace(req.getTagsMap(), scale.getNewTagsMap());
 		client.createScale(req, (scaleReq: ScaleRequest, error: Error | null) => {
 			setIsCreating(false);
 			if (error) {
@@ -136,16 +136,16 @@ export default function FormationEditor({ appName }: Props) {
 		return <Loading />;
 	}
 
-	if (!formation) throw new Error('<FormationEditor> Error: Unexpected lack of formation!');
+	if (!scale) throw new Error('<FormationEditor> Error: Unexpected lack of scale!');
 
-	const isPending = formation.getState() === ScaleRequestState.SCALE_PENDING;
+	const isPending = scale.getState() === ScaleRequestState.SCALE_PENDING;
 
 	return (
 		<form onSubmit={isConfirming ? handleConfirmSubmit : handleSubmit}>
 			{isConfirming || isCreating || isPending ? (
 				<ProcessesDiff
-					formation={formation}
-					nextFormation={nextFormation}
+					scale={scale}
+					nextScale={nextScale}
 					onConfirmScaleToZeroChange={(c) => setIsScaleToZeroConfirmed(c)}
 				/>
 			) : (

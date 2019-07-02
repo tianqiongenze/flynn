@@ -2,23 +2,22 @@ import * as React from 'react';
 import { Checkmark as CheckmarkIcon } from 'grommet-icons';
 import { Box, Button } from 'grommet';
 
-import { Release, Formation, Deployment, CreateScaleRequest } from './generated/controller_pb';
+import { Release, Deployment, CreateScaleRequest } from './generated/controller_pb';
 import useClient from './useClient';
 import useAppRelease from './useAppRelease';
-import useAppFormation from './useAppFormation';
+import useAppScale from './useAppScale';
 import useRelease from './useRelease';
 import useCallIfMounted from './useCallIfMounted';
 import { ErrorHandler } from './useErrorHandler';
 import Loading from './Loading';
 import ReleaseComponent from './Release';
 import ProcessesDiff from './ProcessesDiff';
-import protoMapReplace from './util/protoMapReplace';
 
 interface Props {
 	appName: string;
 	releaseName?: string;
 	newRelease?: Release;
-	newFormation?: Formation;
+	newScale?: CreateScaleRequest;
 	onCancel: () => void;
 	onCreate: (deployment: Deployment) => void;
 	handleError: ErrorHandler;
@@ -27,36 +26,32 @@ interface Props {
 export default function CreateDeployment(props: Props) {
 	const client = useClient();
 	const newRelease = props.newRelease;
-	const newFormation = props.newFormation;
+	const newScale = props.newScale;
 	const { release: currentRelease, loading: currentReleaseLoading, error: currentReleaseError } = useAppRelease(
 		props.appName
 	);
-	const {
-		formation: currentFormation,
-		loading: currentFormationLoading,
-		error: currentFormationError
-	} = useAppFormation(props.appName);
+	const { scale: currentScale, loading: currentScaleLoading, error: currentScaleError } = useAppScale(props.appName);
 	const { release: nextRelease, loading: nextReleaseLoading, error: nextReleaseError } = useRelease(
 		props.releaseName || ''
 	);
 	const isLoading = React.useMemo(
 		() => {
-			return currentReleaseLoading || nextReleaseLoading || currentFormationLoading;
+			return currentReleaseLoading || nextReleaseLoading || currentScaleLoading;
 		},
-		[currentReleaseLoading, nextReleaseLoading, currentFormationLoading]
+		[currentReleaseLoading, nextReleaseLoading, currentScaleLoading]
 	);
 	const [isCreating, setIsCreating] = React.useState(false);
-	const [isScaleToZeroConfirmed, setIsScaleToZeroConfirmed] = React.useState(!props.newFormation);
+	const [isScaleToZeroConfirmed, setIsScaleToZeroConfirmed] = React.useState(!props.newScale);
 	const handleError = props.handleError;
 
 	React.useEffect(
 		() => {
-			const error = currentReleaseError || nextReleaseError || currentFormationError;
+			const error = currentReleaseError || nextReleaseError || currentScaleError;
 			if (error) {
 				handleError(error);
 			}
 		},
-		[currentReleaseError, nextReleaseError, currentFormationError, handleError]
+		[currentReleaseError, nextReleaseError, currentScaleError, handleError]
 	);
 
 	const callIfMounted = useCallIfMounted();
@@ -74,14 +69,8 @@ export default function CreateDeployment(props: Props) {
 		}) as Promise<Release>;
 	}
 
-	function createDeployment(release: Release, formation?: Formation) {
+	function createDeployment(release: Release, scale?: CreateScaleRequest) {
 		const { appName } = props;
-		let scaleRequest = null as CreateScaleRequest | null;
-		if (formation) {
-			scaleRequest = new CreateScaleRequest();
-			protoMapReplace(scaleRequest.getProcessesMap(), formation.getProcessesMap());
-			protoMapReplace(scaleRequest.getTagsMap(), formation.getTagsMap());
-		}
 		let resolve: (deployment: Deployment) => void, reject: (error: Error) => void;
 		const p = new Promise((rs, rj) => {
 			resolve = rs;
@@ -93,9 +82,9 @@ export default function CreateDeployment(props: Props) {
 			}
 			resolve(deployment);
 		};
-		const createDeployment = scaleRequest
+		const createDeployment = scale
 			? () => {
-					return client.createDeploymentWithScale(appName, release.getName(), scaleRequest as CreateScaleRequest, cb);
+					return client.createDeploymentWithScale(appName, release.getName(), scale as CreateScaleRequest, cb);
 			  }
 			: () => {
 					return client.createDeployment(appName, release.getName(), cb);
@@ -106,15 +95,15 @@ export default function CreateDeployment(props: Props) {
 
 	function handleFormSubmit(e: React.SyntheticEvent) {
 		e.preventDefault();
-		const { onCreate, newFormation } = props;
+		const { onCreate, newScale } = props;
 		setIsCreating(true);
 		let p = Promise.resolve(null) as Promise<any>;
 		if (newRelease) {
 			p = createRelease(newRelease).then((release: Release) => {
-				return createDeployment(release, newFormation);
+				return createDeployment(release, newScale);
 			});
 		} else if (nextRelease) {
-			p = createDeployment(nextRelease, newFormation);
+			p = createDeployment(nextRelease, newScale);
 		}
 		p.then((deployment) => {
 			callIfMounted(() => {
@@ -140,13 +129,13 @@ export default function CreateDeployment(props: Props) {
 				<h3>Review Changes</h3>
 				<ReleaseComponent release={(nextRelease || newRelease) as Release} prevRelease={currentRelease} />
 
-				{currentFormation && newFormation ? (
+				{currentScale && newScale ? (
 					<ProcessesDiff
 						align="center"
 						direction="column"
 						margin="small"
-						formation={currentFormation}
-						nextFormation={newFormation}
+						scale={currentScale}
+						nextScale={newScale}
 						onConfirmScaleToZeroChange={(c) => setIsScaleToZeroConfirmed(c)}
 					/>
 				) : null}

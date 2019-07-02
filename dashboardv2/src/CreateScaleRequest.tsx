@@ -3,53 +3,47 @@ import { Box, Button } from 'grommet';
 import { Checkmark as CheckmarkIcon } from 'grommet-icons';
 
 import useClient from './useClient';
-import useAppFormation from './useAppFormation';
+import useAppScale from './useAppScale';
 import useCallIfMounted from './useCallIfMounted';
 import { ErrorHandler } from './useErrorHandler';
 import Loading from './Loading';
 import ProcessesDiff from './ProcessesDiff';
 import protoMapDiff from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
-import { Formation, ScaleRequest, CreateScaleRequest } from './generated/controller_pb';
+import { ScaleRequest, CreateScaleRequest } from './generated/controller_pb';
 
 interface Props {
 	appName: string;
-	nextFormation: Formation;
+	nextScale: CreateScaleRequest;
 	onCancel: () => void;
 	onCreate: (scaleRequest: ScaleRequest) => void;
 	handleError: ErrorHandler;
 }
 
-export default function CreateScaleRequestComponent({
-	appName,
-	nextFormation,
-	onCancel,
-	onCreate,
-	handleError
-}: Props) {
+export default function CreateScaleRequestComponent({ appName, nextScale, onCancel, onCreate, handleError }: Props) {
 	const client = useClient();
 	const callIfMounted = useCallIfMounted();
-	const { formation, loading: isLoading, error: formationError } = useAppFormation(appName);
+	const { scale, loading: isLoading, error: scaleError } = useAppScale(appName);
 	const [hasChanges, setHasChanges] = React.useState(true);
 	const [isCreating, setIsCreating] = React.useState(false);
 	const [isScaleToZeroConfirmed, setIsScaleToZeroConfirmed] = React.useState(false);
 
 	React.useEffect(
 		() => {
-			if (formationError) {
-				handleError(formationError);
+			if (scaleError) {
+				handleError(scaleError);
 			}
 		},
-		[formationError, handleError]
+		[scaleError, handleError]
 	);
 
-	// keep track of if selected formation actually changes anything
+	// keep track of if selected scale actually changes anything
 	React.useEffect(
 		() => {
-			const diff = protoMapDiff((formation || new Formation()).getProcessesMap(), nextFormation.getProcessesMap());
+			const diff = protoMapDiff((scale || new ScaleRequest()).getNewProcessesMap(), nextScale.getProcessesMap());
 			setHasChanges(diff.length > 0);
 		},
-		[nextFormation, formation]
+		[nextScale, scale]
 	);
 
 	function handleSubmit(e: React.SyntheticEvent) {
@@ -58,9 +52,9 @@ export default function CreateScaleRequestComponent({
 		setIsCreating(true);
 
 		const req = new CreateScaleRequest();
-		req.setParent(nextFormation.getParent());
-		protoMapReplace(req.getProcessesMap(), nextFormation.getProcessesMap());
-		protoMapReplace(req.getTagsMap(), nextFormation.getTagsMap());
+		req.setParent(nextScale.getParent());
+		protoMapReplace(req.getProcessesMap(), nextScale.getProcessesMap());
+		protoMapReplace(req.getTagsMap(), nextScale.getTagsMap());
 		client.createScale(req, (scaleReq: ScaleRequest, error: Error | null) => {
 			callIfMounted(() => {
 				if (error) {
@@ -77,7 +71,7 @@ export default function CreateScaleRequestComponent({
 		return <Loading />;
 	}
 
-	if (!formation) throw new Error('<CreateScaleRequestComponent> Error: Unexpected lack of formation!');
+	if (!scale) throw new Error('<CreateScaleRequestComponent> Error: Unexpected lack of scale!');
 
 	return (
 		<Box tag="form" fill direction="column" onSubmit={handleSubmit} gap="small" justify="between">
@@ -87,8 +81,8 @@ export default function CreateScaleRequestComponent({
 				<ProcessesDiff
 					margin="small"
 					align="center"
-					formation={formation}
-					nextFormation={nextFormation}
+					scale={scale}
+					nextScale={nextScale}
 					onConfirmScaleToZeroChange={(c) => setIsScaleToZeroConfirmed(c)}
 				/>
 			</Box>

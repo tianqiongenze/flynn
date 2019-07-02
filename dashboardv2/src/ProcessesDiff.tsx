@@ -3,18 +3,18 @@ import { Box, BoxProps } from 'grommet';
 
 import ProcessScale from './ProcessScale';
 import protoMapDiff, { Diff, DiffOp, DiffOption } from './util/protoMapDiff';
-import { Formation, ScaleRequestState } from './generated/controller_pb';
+import { ScaleRequest, CreateScaleRequest, ScaleRequestState } from './generated/controller_pb';
 
 interface Props extends BoxProps {
-	formation: Formation;
-	nextFormation: Formation;
+	scale: ScaleRequest;
+	nextScale: CreateScaleRequest;
 	confirmScaleToZero?: boolean;
 	onConfirmScaleToZeroChange?: (confirmed: boolean) => void;
 }
 
 export default function ProcessesDiff({
-	formation,
-	nextFormation,
+	scale,
+	nextScale,
 	confirmScaleToZero = true,
 	onConfirmScaleToZeroChange = () => {},
 	...boxProps
@@ -24,17 +24,17 @@ export default function ProcessesDiff({
 		// keep up-to-date full diff of processes
 		() => {
 			const fullDiff = protoMapDiff(
-				(formation || new Formation()).getProcessesMap(),
-				nextFormation.getProcessesMap(),
+				(scale || new ScaleRequest()).getNewProcessesMap(),
+				nextScale.getProcessesMap(),
 				DiffOption.INCLUDE_UNCHANGED,
 				DiffOption.NO_DUPLICATE_KEYS
 			);
 			setProcessesFullDiff(fullDiff);
 		},
-		[nextFormation, formation]
+		[nextScale, scale]
 	);
 
-	const isPending = formation.getState() === ScaleRequestState.SCALE_PENDING;
+	const isPending = scale.getState() === ScaleRequestState.SCALE_PENDING;
 
 	const [isScaleToZeroConfirmed, setIsScaleToZeroConfirmed] = React.useState<boolean | null>(null);
 	const [scaleToZeroConfirmed, setScaleToZeroConfirmed] = React.useState(new Map<string, boolean>());
@@ -72,7 +72,7 @@ export default function ProcessesDiff({
 			{processesFullDiff.reduce(
 				(m: React.ReactNodeArray, op: DiffOp<string, number>) => {
 					const key = op.key;
-					let startVal = formation.getProcessesMap().get(key) || 0;
+					let startVal = scale.getNewProcessesMap().get(key) || 0;
 					let val = op.value || 0;
 					if (op.op === 'remove') {
 						val = 0;

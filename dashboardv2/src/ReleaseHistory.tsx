@@ -10,7 +10,7 @@ import RightOverlay from './RightOverlay';
 
 import { default as useRouter, UseRouterObejct } from './useRouter';
 import useApp from './useApp';
-import useAppFormation from './useAppFormation';
+import useAppScale from './useAppScale';
 import useErrorHandler from './useErrorHandler';
 import { listDeploymentsRequestFilterType } from './client';
 import { ClientContext } from './withClient';
@@ -21,7 +21,7 @@ import {
 	Deployment,
 	ExpandedDeployment,
 	ScaleRequest,
-	Formation
+	CreateScaleRequest
 } from './generated/controller_pb';
 import Loading from './Loading';
 import CreateDeployment from './CreateDeployment';
@@ -335,6 +335,7 @@ export default function ReleaseHistory({ appName }: Props) {
 				return;
 			}
 
+			// TODO(jvatic): use client.streamScales
 			const cancel = client.streamAppScales(appName, (scaleRequests: ScaleRequest[], error: Error | null) => {
 				if (error) {
 					handleError(error);
@@ -350,18 +351,14 @@ export default function ReleaseHistory({ appName }: Props) {
 	);
 
 	// Get current formation
-	const {
-		formation: currentFormation,
-		loading: currentFormationLoading,
-		error: currentFormationError
-	} = useAppFormation(appName);
+	const { scale: currentScale, loading: currentScaleLoading, error: currentScaleError } = useAppScale(appName);
 	React.useEffect(
 		() => {
-			if (currentFormationError) {
-				handleError(currentFormationError);
+			if (currentScaleError) {
+				handleError(currentScaleError);
 			}
 		},
-		[currentFormationError, handleError]
+		[currentScaleError, handleError]
 	);
 
 	const [selectedResourceType, setSelectedResourceType] = React.useState<SelectedResourceType>(
@@ -377,17 +374,17 @@ export default function ReleaseHistory({ appName }: Props) {
 			if (selectedResourceType === SelectedResourceType.ScaleRequest) {
 				const sr = scaleRequests.find((sr) => sr.getName() === selectedItemName);
 				if (sr) {
-					const diff = protoMapDiff((currentFormation as Formation).getProcessesMap(), sr.getNewProcessesMap());
+					const diff = protoMapDiff((currentScale as ScaleRequest).getNewProcessesMap(), sr.getNewProcessesMap());
 					setSelectedScaleRequestDiff(diff);
 					return;
 				}
 			}
 			setSelectedScaleRequestDiff([]);
 		},
-		[currentFormation, isDeploying, scaleRequests, selectedItemName, selectedResourceType]
+		[currentScale, isDeploying, scaleRequests, selectedItemName, selectedResourceType]
 	);
 
-	const [nextFormation, setNextFormation] = React.useState<Formation | null>(null);
+	const [nextScale, setNextFormation] = React.useState<CreateScaleRequest | null>(null);
 	const [nextReleaseName, setNextReleaseName] = React.useState('');
 	const submitHandler = (e: React.SyntheticEvent) => {
 		e.preventDefault();
@@ -399,14 +396,14 @@ export default function ReleaseHistory({ appName }: Props) {
 		if (selectedResourceType === SelectedResourceType.ScaleRequest) {
 			// It's a scale request we're deploying
 			const sr = scaleRequests.find((sr) => sr.getName() === selectedItemName);
-			const nextFormation = new Formation();
+			const nextScale = new CreateScaleRequest();
 			if (!sr) {
 				return;
 			}
-			nextFormation.setParent(sr.getParent());
-			protoMapReplace(nextFormation.getProcessesMap(), sr.getNewProcessesMap());
-			protoMapReplace(nextFormation.getTagsMap(), sr.getNewTagsMap());
-			setNextFormation(nextFormation);
+			nextScale.setParent(sr.getParent());
+			protoMapReplace(nextScale.getProcessesMap(), sr.getNewProcessesMap());
+			protoMapReplace(nextScale.getTagsMap(), sr.getNewTagsMap());
+			setNextFormation(nextScale);
 			if (selectedItemName.startsWith(currentReleaseName)) {
 				// We're scaling the current release
 				setNextReleaseName(currentReleaseName);
@@ -435,7 +432,7 @@ export default function ReleaseHistory({ appName }: Props) {
 		setNextFormation(null);
 	};
 
-	if (deploymentsLoading || scaleRequestsLoading || currentFormationLoading || appLoading) {
+	if (deploymentsLoading || scaleRequestsLoading || currentScaleLoading || appLoading) {
 		return <Loading />;
 	}
 
@@ -446,10 +443,10 @@ export default function ReleaseHistory({ appName }: Props) {
 					{selectedResourceType === SelectedResourceType.ScaleRequest &&
 					nextReleaseName &&
 					nextReleaseName === currentReleaseName &&
-					nextFormation ? (
+					nextScale ? (
 						<CreateScaleRequestComponent
 							appName={appName}
-							nextFormation={nextFormation}
+							nextScale={nextScale}
 							onCancel={handleDeployCancel}
 							onCreate={handleDeployComplete}
 							handleError={handleError}
@@ -458,7 +455,7 @@ export default function ReleaseHistory({ appName }: Props) {
 						<CreateDeployment
 							appName={appName}
 							releaseName={nextReleaseName}
-							newFormation={nextFormation || undefined}
+							newScale={nextScale || undefined}
 							onCancel={handleDeployCancel}
 							onCreate={handleDeployComplete}
 							handleError={handleError}
@@ -506,7 +503,7 @@ export default function ReleaseHistory({ appName }: Props) {
 								margin={{ bottom: 'small' }}
 								scaleRequest={s}
 								selected={selectedItemName === s.getName()}
-								isCurrent={currentFormation ? currentFormation.getScaleRequest() === s.getName() : false}
+								isCurrent={currentScale ? currentScale.getName() === s.getName() : false}
 								onChange={(isSelected) => {
 									if (isSelected) {
 										setSelectedItemName(s.getName());
