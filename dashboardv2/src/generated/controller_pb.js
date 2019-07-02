@@ -3759,8 +3759,6 @@ proto.controller.CreateDeploymentRequest.prototype.toObject = function(opt_inclu
 proto.controller.CreateDeploymentRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
     parent: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    release: jspb.Message.getFieldWithDefault(msg, 2, ""),
-    requestId: jspb.Message.getFieldWithDefault(msg, 3, ""),
     scaleRequest: (f = msg.getScaleRequest()) && proto.controller.CreateScaleRequest.toObject(includeInstance, f)
   };
 
@@ -3803,14 +3801,6 @@ proto.controller.CreateDeploymentRequest.deserializeBinaryFromReader = function(
       msg.setParent(value);
       break;
     case 2:
-      var value = /** @type {string} */ (reader.readString());
-      msg.setRelease(value);
-      break;
-    case 3:
-      var value = /** @type {string} */ (reader.readString());
-      msg.setRequestId(value);
-      break;
-    case 4:
       var value = new proto.controller.CreateScaleRequest;
       reader.readMessage(value,proto.controller.CreateScaleRequest.deserializeBinaryFromReader);
       msg.setScaleRequest(value);
@@ -3851,24 +3841,10 @@ proto.controller.CreateDeploymentRequest.serializeBinaryToWriter = function(mess
       f
     );
   }
-  f = message.getRelease();
-  if (f.length > 0) {
-    writer.writeString(
-      2,
-      f
-    );
-  }
-  f = message.getRequestId();
-  if (f.length > 0) {
-    writer.writeString(
-      3,
-      f
-    );
-  }
   f = message.getScaleRequest();
   if (f != null) {
     writer.writeMessage(
-      4,
+      2,
       f,
       proto.controller.CreateScaleRequest.serializeBinaryToWriter
     );
@@ -3892,48 +3868,18 @@ proto.controller.CreateDeploymentRequest.prototype.setParent = function(value) {
 
 
 /**
- * optional string release = 2;
- * @return {string}
- */
-proto.controller.CreateDeploymentRequest.prototype.getRelease = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
-};
-
-
-/** @param {string} value */
-proto.controller.CreateDeploymentRequest.prototype.setRelease = function(value) {
-  jspb.Message.setProto3StringField(this, 2, value);
-};
-
-
-/**
- * optional string request_id = 3;
- * @return {string}
- */
-proto.controller.CreateDeploymentRequest.prototype.getRequestId = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 3, ""));
-};
-
-
-/** @param {string} value */
-proto.controller.CreateDeploymentRequest.prototype.setRequestId = function(value) {
-  jspb.Message.setProto3StringField(this, 3, value);
-};
-
-
-/**
- * optional CreateScaleRequest scale_request = 4;
+ * optional CreateScaleRequest scale_request = 2;
  * @return {?proto.controller.CreateScaleRequest}
  */
 proto.controller.CreateDeploymentRequest.prototype.getScaleRequest = function() {
   return /** @type{?proto.controller.CreateScaleRequest} */ (
-    jspb.Message.getWrapperField(this, proto.controller.CreateScaleRequest, 4));
+    jspb.Message.getWrapperField(this, proto.controller.CreateScaleRequest, 2));
 };
 
 
 /** @param {?proto.controller.CreateScaleRequest|undefined} value */
 proto.controller.CreateDeploymentRequest.prototype.setScaleRequest = function(value) {
-  jspb.Message.setWrapperField(this, 4, value);
+  jspb.Message.setWrapperField(this, 2, value);
 };
 
 
@@ -3950,7 +3896,7 @@ proto.controller.CreateDeploymentRequest.prototype.clearScaleRequest = function(
  * @return {boolean}
  */
 proto.controller.CreateDeploymentRequest.prototype.hasScaleRequest = function() {
-  return jspb.Message.getField(this, 4) != null;
+  return jspb.Message.getField(this, 2) != null;
 };
 
 

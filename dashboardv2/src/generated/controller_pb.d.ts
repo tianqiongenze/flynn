@@ -458,12 +458,6 @@ export class CreateDeploymentRequest extends jspb.Message {
   getParent(): string;
   setParent(value: string): void;
 
-  getRelease(): string;
-  setRelease(value: string): void;
-
-  getRequestId(): string;
-  setRequestId(value: string): void;
-
   hasScaleRequest(): boolean;
   clearScaleRequest(): void;
   getScaleRequest(): CreateScaleRequest | undefined;
@@ -482,8 +476,6 @@ export class CreateDeploymentRequest extends jspb.Message {
 export namespace CreateDeploymentRequest {
   export type AsObject = {
     parent: string,
-    release: string,
-    requestId: string,
     scaleRequest?: CreateScaleRequest.AsObject,
   }
 }

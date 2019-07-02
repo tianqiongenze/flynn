@@ -1060,7 +1060,8 @@ func parseDeploymentProcesses(from map[string]int32) map[string]int {
 
 func (s *server) CreateDeployment(req *protobuf.CreateDeploymentRequest, ds protobuf.Controller_CreateDeploymentServer) error {
 	appID := utils.ParseIDFromName(req.Parent, "apps")
-	d, err := s.deploymentRepo.Add(appID, utils.ParseIDFromName(req.Release, "releases"))
+	releaseID := utils.ParseIDFromName(req.Parent, "releases")
+	d, err := s.deploymentRepo.Add(appID, releaseID)
 	if err != nil {
 		// TODO(jvatic): return proper error code
 		return err
