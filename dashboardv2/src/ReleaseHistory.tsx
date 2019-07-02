@@ -13,7 +13,7 @@ import useApp from './useApp';
 import useAppScale from './useAppScale';
 import useAppScales from './useAppScales';
 import useErrorHandler from './useErrorHandler';
-import { listDeploymentsRequestFilterType, setNameFilters } from './client';
+import { listDeploymentsRequestFilterType, setNameFilters, setStreamUpdates, setStreamCreates } from './client';
 import { ClientContext } from './withClient';
 import {
 	Release,
@@ -319,7 +319,9 @@ export default function ReleaseHistory({ appName }: Props) {
 					setDeploymentsLoading(false);
 				},
 				setNameFilters(appName),
-				listDeploymentsRequestFilterType(filterType)
+				listDeploymentsRequestFilterType(filterType),
+				setStreamUpdates(),
+				setStreamCreates()
 			);
 			return cancel;
 		},
