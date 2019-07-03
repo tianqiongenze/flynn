@@ -1,7 +1,7 @@
 import * as React from 'react';
 import useClient from './useClient';
 import useApp from './useApp';
-import { setNameFilters, filterScalesByState, setPageSize, setStreamCreates } from './client';
+import { setNameFilters, filterScalesByState, setPageSize, setStreamCreates, setStreamUpdates } from './client';
 import { ScaleRequest, ScaleRequestState } from './generated/controller_pb';
 
 export default function useAppScale(appName: string) {
@@ -37,7 +37,8 @@ export default function useAppScale(appName: string) {
 				setNameFilters(releaseName),
 				filterScalesByState(ScaleRequestState.SCALE_COMPLETE),
 				setPageSize(1),
-				setStreamCreates()
+				setStreamCreates(),
+				setStreamUpdates()
 			);
 			return cancel;
 		},
