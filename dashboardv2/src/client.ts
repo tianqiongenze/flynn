@@ -291,6 +291,7 @@ class _Client implements Client {
 				const apps = [] as App[];
 				(prev ? prev.getAppsList() : []).forEach((app, index) => {
 					appIndices.set(app.getName(), index);
+					apps.push(app);
 				});
 				res.getAppsList().forEach((app) => {
 					const index = appIndices.get(app.getName());
@@ -332,6 +333,7 @@ class _Client implements Client {
 				const releases = [] as Release[];
 				(prev ? prev.getReleasesList() : []).forEach((release, index) => {
 					releaseIndices.set(release.getName(), index);
+					releases.push(release);
 				});
 				res.getReleasesList().forEach((release) => {
 					const index = releaseIndices.get(release.getName());
