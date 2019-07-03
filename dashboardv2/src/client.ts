@@ -386,7 +386,7 @@ class _Client implements Client {
 					}
 				});
 				scales.sort((a, b) => {
-					return compareTimestamps(b.getUpdateTime(), a.getUpdateTime());
+					return compareTimestamps(b.getCreateTime(), a.getCreateTime());
 				});
 				res.setScaleRequestsList(scales);
 				return res;
