@@ -170,6 +170,13 @@ func (s *S) updateTestApp(c *C, app *protobuf.App) *protobuf.App {
 	return app
 }
 
+func (s *S) setTestAppRelease(c *C, app *protobuf.App, releaseName string) *protobuf.App {
+	ctApp := utils.BackConvertApp(app)
+	releaseID := utils.ParseIDFromName(releaseName, "releases")
+	c.Assert(s.conf.appRepo.SetRelease(ctApp, releaseID), IsNil)
+	return utils.ConvertApp(ctApp)
+}
+
 func (s *S) createTestRelease(c *C, parentName string, release *protobuf.Release) *protobuf.Release {
 	ctRelease := utils.BackConvertRelease(release)
 	ctRelease.AppID = utils.ParseIDFromName(parentName, "apps")
@@ -446,6 +453,19 @@ func (s *S) TestStreamApps(c *C) {
 	c.Assert(res, Not(IsNil))
 	c.Assert(len(res.Apps), Equals, 1)
 	c.Assert(res.Apps[0], DeepEquals, updatedTestApp1)
+	cancel()
+
+	// test streaming updates (new release)
+	stream, cancel = streamAppsWithCancel(&protobuf.StreamAppsRequest{StreamUpdates: true})
+	receiveAppsStream(stream) // initial page
+	testRelease1 := s.createTestRelease(c, testApp5.Name, &protobuf.Release{})
+	testApp5 = s.setTestAppRelease(c, testApp5, testRelease1.Name)
+	fmt.Println(map[string]string{"app": testApp5.Name, "release": testRelease1.Name})
+	res = receiveAppsStream(stream)
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Apps), Equals, 1)
+	c.Assert(res.Apps[0], DeepEquals, testApp5)
+	c.Assert(res.Apps[0].Release, Equals, testRelease1.Name)
 	cancel()
 
 	// test streaming creates

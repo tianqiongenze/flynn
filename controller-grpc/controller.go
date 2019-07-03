@@ -438,7 +438,7 @@ func (s *server) StreamApps(req *protobuf.StreamAppsRequest, stream protobuf.Con
 					fmt.Printf("StreamApps: Error getting App(%s): %s\n", event.AppID, err)
 					continue
 				}
-				(ctApp.(*ct.App)).ReleaseID = event.ObjectID
+				event.Op = ct.EventOpUpdate
 				maybeSendApp(event, utils.ConvertApp(ctApp.(*ct.App)))
 			}
 		}
