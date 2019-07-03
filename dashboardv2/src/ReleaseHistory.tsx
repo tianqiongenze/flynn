@@ -22,7 +22,8 @@ import {
 	Deployment,
 	ExpandedDeployment,
 	ScaleRequest,
-	CreateScaleRequest
+	CreateScaleRequest,
+	ScaleRequestState
 } from './generated/controller_pb';
 import Loading from './Loading';
 import CreateDeployment from './CreateDeployment';
@@ -194,6 +195,20 @@ function ReleaseHistoryScale({
 				/>
 				<div>
 					<div>Release {releaseID}</div>
+					<div>
+						{(() => {
+							switch (s.getState()) {
+								case ScaleRequestState.SCALE_PENDING:
+									return 'PENDING';
+								case ScaleRequestState.SCALE_CANCELLED:
+									return 'CANCELED';
+								case ScaleRequestState.SCALE_COMPLETE:
+									return 'COMPLETE';
+								default:
+									return 'UNKNOWN';
+							}
+						})()}
+					</div>
 					<Box direction="row">
 						{diff.length === 0 ? <Text color="dark-2">&lt;No processes&gt;</Text> : null}
 						{diff.reduce(
