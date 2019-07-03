@@ -444,9 +444,16 @@ INSERT INTO scale_requests (scale_request_id, app_id, release_id, state, old_pro
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING created_at, updated_at`
 	scaleRequestCancelQuery = `
-UPDATE scale_requests SET state = 'cancelled' WHERE app_id = $1 AND release_id = $2`
+WITH updated AS (
+	UPDATE scale_requests SET state = 'cancelled', updated_at = now() WHERE app_id = $1 AND release_id = $2 AND state != 'cancelled'
+	RETURNING *
+)
+SELECT scale_request_id, app_id, release_id, state, old_processes, new_processes, old_tags, new_tags, created_at, updated_at
+FROM updated
+ORDER BY created_at DESC`
 	scaleRequestUpdateQuery = `
-UPDATE scale_requests SET state = $2 WHERE scale_request_id = $1`
+UPDATE scale_requests SET state = $2, updated_at = now() WHERE scale_request_id = $1
+RETURNING updated_at`
 	scaleRequestListQuery = `
 SELECT s.scale_request_id, s.app_id, s.release_id, s.state, s.old_processes, s.new_processes, s.old_tags, s.new_tags, s.created_at, s.updated_at
 FROM scale_requests s

@@ -75,8 +75,24 @@ func (r *FormationRepo) AddScaleRequest(req *ct.ScaleRequest, deleteFormation bo
 		return nil, err
 	}
 
-	// cancel any current scale requests for the same formation
-	if err := tx.Exec("scale_request_cancel", req.AppID, req.ReleaseID); err != nil {
+	// cancel any current scale requests for the same formation (and return them
+	// so we can emit events for them below)
+	var canceledScaleRequests []*ct.ScaleRequest
+	rows, err := tx.Query("scale_request_cancel", req.AppID, req.ReleaseID)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	for rows.Next() {
+		scale, err := scanScaleRequest(rows)
+		if err != nil {
+			rows.Close()
+			tx.Rollback()
+			return nil, err
+		}
+		canceledScaleRequests = append(canceledScaleRequests, scale)
+	}
+	if err := rows.Err(); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
@@ -159,6 +175,18 @@ func (r *FormationRepo) AddScaleRequest(req *ct.ScaleRequest, deleteFormation bo
 	}, req); err != nil {
 		tx.Rollback()
 		return nil, err
+	}
+	// emit a scale request event for each one we canceled
+	for _, s := range canceledScaleRequests {
+		if err := CreateEvent(tx.Exec, &ct.Event{
+			AppID:      s.AppID,
+			ObjectID:   s.ID,
+			ObjectType: ct.EventTypeScaleRequest,
+			Op:         ct.EventOpUpdate,
+		}, s); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
 	}
 
 	// emit a deprecated scale event for old clients
@@ -372,7 +400,7 @@ func (r *FormationRepo) UpdateScaleRequest(req *ct.ScaleRequest) error {
 	if err != nil {
 		return err
 	}
-	if err := tx.Exec("scale_request_update", req.ID, string(req.State)); err != nil {
+	if err := tx.QueryRow("scale_request_update", req.ID, string(req.State)).Scan(&req.UpdatedAt); err != nil {
 		tx.Rollback()
 		return err
 	}
