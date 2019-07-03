@@ -146,7 +146,8 @@ UPDATE apps SET strategy = $2, updated_at = now() WHERE app_id = $1`
 	appUpdateMetaQuery = `
 UPDATE apps SET meta = $2, updated_at = now() WHERE app_id = $1`
 	appUpdateReleaseQuery = `
-UPDATE apps SET release_id = $2, updated_at = now() WHERE app_id = $1`
+UPDATE apps SET release_id = $2, updated_at = now() WHERE app_id = $1
+RETURNING updated_at`
 	appUpdateDeployTimeoutQuery = `
 UPDATE apps SET deploy_timeout = $2, updated_at = now() WHERE app_id = $1`
 	appDeleteQuery = `

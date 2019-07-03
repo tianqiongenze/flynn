@@ -296,7 +296,7 @@ func (r *AppRepo) TxSetRelease(tx *postgres.DBTx, app *ct.App, releaseID string)
 		return err
 	}
 	app.ReleaseID = releaseID
-	if err := tx.Exec("app_update_release", app.ID, app.ReleaseID); err != nil {
+	if err := tx.QueryRow("app_update_release", app.ID, app.ReleaseID).Scan(&app.UpdatedAt); err != nil {
 		return err
 	}
 	return CreateEvent(tx.Exec, &ct.Event{
