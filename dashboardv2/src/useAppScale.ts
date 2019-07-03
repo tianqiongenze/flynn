@@ -1,15 +1,21 @@
 import * as React from 'react';
 import useClient from './useClient';
+import useApp from './useApp';
 import { setNameFilters, filterScalesByState, setPageSize, setStreamCreates } from './client';
 import { ScaleRequest, ScaleRequestState } from './generated/controller_pb';
 
 export default function useAppScale(appName: string) {
 	const client = useClient();
+	const { app, loading: appLoading, error: appError } = useApp(appName);
+	const releaseName = app ? app.getRelease() : '';
 	const [loading, setLoading] = React.useState(true);
 	const [scale, setScale] = React.useState<ScaleRequest | null>(null);
 	const [error, setError] = React.useState<Error | null>(null);
 	React.useEffect(
 		() => {
+			if (!releaseName) {
+				return;
+			}
 			const cancel = client.streamScales(
 				(scales: ScaleRequest[], error: Error | null) => {
 					if (error) {
@@ -28,18 +34,18 @@ export default function useAppScale(appName: string) {
 					setLoading(false);
 					setError(null);
 				},
-				setNameFilters(appName),
+				setNameFilters(releaseName),
 				filterScalesByState(ScaleRequestState.SCALE_COMPLETE),
 				setPageSize(1),
 				setStreamCreates()
 			);
 			return cancel;
 		},
-		[appName, client]
+		[releaseName, client]
 	);
 	return {
-		loading,
+		loading: appLoading || loading,
 		scale,
-		error
+		error: appError || error
 	};
 }
