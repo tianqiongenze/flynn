@@ -392,7 +392,7 @@ func (s *server) StreamApps(req *protobuf.StreamAppsRequest, stream protobuf.Con
 
 	maybeSendApp := func(event *ct.Event, app *protobuf.App) {
 		shouldSend := false
-		if (req.StreamCreates && event.Op == ct.EventOpCreate) || (req.StreamUpdates && event.Op == ct.EventOpUpdate) {
+		if (req.StreamCreates && event.Op == ct.EventOpCreate) || (req.StreamUpdates && event.Op == ct.EventOpUpdate) || (req.StreamUpdates && event.ObjectType == ct.EventTypeAppRelease) {
 			shouldSend = true
 		}
 		if !protobuf.MatchLabelFilters(app.Labels, req.GetLabelFilters()) {
@@ -438,7 +438,6 @@ func (s *server) StreamApps(req *protobuf.StreamAppsRequest, stream protobuf.Con
 					fmt.Printf("StreamApps: Error getting App(%s): %s\n", event.AppID, err)
 					continue
 				}
-				event.Op = ct.EventOpUpdate
 				maybeSendApp(event, utils.ConvertApp(ctApp.(*ct.App)))
 			}
 		}
