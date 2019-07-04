@@ -25,7 +25,7 @@ export default function useRelease(releaseName: string) {
 						setError(error);
 						return;
 					}
-					setRelease(releases[0] || new Release());
+					setRelease(releases[0] || null);
 					setError(null);
 				},
 				setNameFilters(releaseName),
