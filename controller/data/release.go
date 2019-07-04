@@ -156,6 +156,38 @@ func (r *ReleaseRepo) List() (interface{}, error) {
 	return releaseList(rows)
 }
 
+type ListReleaseOptions struct {
+	PageToken  PageToken
+	AppIDs     []string
+	ReleaseIDs []string
+}
+
+func (r *ReleaseRepo) ListPage(opts ListReleaseOptions) ([]*ct.Release, *PageToken, error) {
+	var pageSize int
+	if opts.PageToken.Size > 0 {
+		pageSize = opts.PageToken.Size
+	} else {
+		pageSize = DEFAULT_PAGE_SIZE
+	}
+	rows, err := r.db.Query("release_list_page", opts.AppIDs, opts.ReleaseIDs, opts.PageToken.BeforeID, pageSize+1)
+	if err != nil {
+		return nil, nil, err
+	}
+	releases, err := releaseList(rows)
+	if err != nil {
+		return nil, nil, err
+	}
+	var nextPageToken *PageToken
+	if len(releases) == pageSize+1 {
+		releases = releases[0:pageSize]
+		nextPageToken = &PageToken{
+			BeforeID: &releases[0].ID,
+			Size:     pageSize,
+		}
+	}
+	return releases, nextPageToken, rows.Err()
+}
+
 func (r *ReleaseRepo) AppList(appID string) ([]*ct.Release, error) {
 	rows, err := r.db.Query(`release_app_list`, appID)
 	if err != nil {

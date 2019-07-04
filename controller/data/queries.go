@@ -22,6 +22,7 @@ var preparedStatements = map[string]string{
 	"app_next_name_id":                      appNextNameIDQuery,
 	"app_get_release":                       appGetReleaseQuery,
 	"release_list":                          releaseListQuery,
+	"release_list_page":                     releaseListPageQuery,
 	"release_select":                        releaseSelectQuery,
 	"release_insert":                        releaseInsertQuery,
 	"release_app_list":                      releaseAppListQuery,
@@ -173,6 +174,33 @@ SELECT r.release_id, r.app_id,
 	ORDER BY a.index
   ), r.env, r.processes, r.meta, r.created_at
 FROM releases r WHERE r.deleted_at IS NULL ORDER BY r.created_at DESC`
+	releaseListPageQuery = `
+SELECT r.release_id, r.app_id,
+  ARRAY(
+		SELECT a.artifact_id
+		FROM release_artifacts a
+		WHERE a.release_id = r.release_id AND a.deleted_at IS NULL
+		ORDER BY a.index
+  ), r.env, r.processes, r.meta, r.created_at
+FROM releases r
+LEFT OUTER JOIN (SELECT release_id, created_at FROM releases WHERE release_id = $3 LIMIT 1) AS before_r ON true
+WHERE CASE
+	WHEN array_length($1::text[], 1) > 0 AND array_length($2::text[], 1) > 0
+		THEN r.release_id::text = ANY($2::text[]) OR r.app_id::text = ANY($1::text[])
+	WHEN array_length($1::text[], 1) > 0
+		THEN r.app_id::text = ANY($1::text[])
+	WHEN array_length($2::text[], 1) > 0
+		THEN r.release_id::text = ANY($2::text[])
+	ELSE true
+END
+AND CASE WHEN before_r IS NULL THEN true
+ELSE
+	r.created_at <= before_r.created_at
+	AND r.release_id != before_r.release_id
+END
+ORDER BY r.created_at DESC
+LIMIT $4
+`
 	releaseSelectQuery = `
 SELECT r.release_id, r.app_id,
   ARRAY(
