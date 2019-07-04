@@ -607,6 +607,14 @@ func (s *S) TestStreamReleases(c *C) {
 	c.Assert(res.Releases[0], DeepEquals, testRelease2)
 	c.Assert(receivedEOF, Equals, true)
 
+	// test fetching a single release by name with page size set to 1
+	res, receivedEOF = unaryReceiveReleases(&protobuf.StreamReleasesRequest{PageSize: 1, NameFilters: []string{testRelease2.Name}})
+	c.Assert(res, Not(IsNil))
+	c.Assert(len(res.Releases), Equals, 1)
+	c.Assert(strings.HasPrefix(res.Releases[0].Name, testApp1.Name), Equals, true)
+	c.Assert(res.Releases[0], DeepEquals, testRelease2)
+	c.Assert(receivedEOF, Equals, true)
+
 	// test fetching a single release by app name
 	res, receivedEOF = unaryReceiveReleases(&protobuf.StreamReleasesRequest{NameFilters: []string{testApp2.Name}})
 	c.Assert(res, Not(IsNil))
