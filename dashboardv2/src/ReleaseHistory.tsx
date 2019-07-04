@@ -388,7 +388,7 @@ export default function ReleaseHistory({ appName }: Props) {
 		[currentScale, isDeploying, scales, selectedItemName, selectedResourceType]
 	);
 
-	const [nextScale, setNextFormation] = React.useState<CreateScaleRequest | null>(null);
+	const [nextScale, setNextScale] = React.useState<CreateScaleRequest | null>(null);
 	const [nextReleaseName, setNextReleaseName] = React.useState('');
 	const submitHandler = (e: React.SyntheticEvent) => {
 		e.preventDefault();
@@ -407,7 +407,7 @@ export default function ReleaseHistory({ appName }: Props) {
 			nextScale.setParent(sr.getParent());
 			protoMapReplace(nextScale.getProcessesMap(), sr.getNewProcessesMap());
 			protoMapReplace(nextScale.getTagsMap(), sr.getNewTagsMap());
-			setNextFormation(nextScale);
+			setNextScale(nextScale);
 			if (selectedItemName.startsWith(currentReleaseName)) {
 				// We're scaling the current release
 				setNextReleaseName(currentReleaseName);
@@ -419,7 +419,7 @@ export default function ReleaseHistory({ appName }: Props) {
 		} else {
 			// It's a release we're deploying
 			setNextReleaseName(selectedItemName);
-			setNextFormation(null);
+			setNextScale(null);
 			setIsDeploying(true);
 		}
 	};
@@ -427,13 +427,13 @@ export default function ReleaseHistory({ appName }: Props) {
 	const handleDeployCancel = () => {
 		setIsDeploying(false);
 		setNextReleaseName('');
-		setNextFormation(null);
+		setNextScale(null);
 	};
 
 	const handleDeployComplete = (item: Deployment | ScaleRequest) => {
 		setIsDeploying(false);
 		setNextReleaseName('');
-		setNextFormation(null);
+		setNextScale(null);
 	};
 
 	if (deploymentsLoading || scalesLoading || currentScaleLoading || appLoading) {
