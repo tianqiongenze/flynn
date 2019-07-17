@@ -4,11 +4,10 @@ import styled from 'styled-components';
 
 import { Checkmark as CheckmarkIcon } from 'grommet-icons';
 import { CheckBox, Button, Box, BoxProps, Text } from 'grommet';
-import { Omit } from 'grommet/utils';
 import ProcessScale from './ProcessScale';
 import RightOverlay from './RightOverlay';
 
-import { default as useRouter, UseRouterObejct } from './useRouter';
+import { default as useRouter } from './useRouter';
 import useApp from './useApp';
 import useAppScale from './useAppScale';
 import useAppScales from './useAppScales';
@@ -92,63 +91,6 @@ const SelectableBox = styled(Box)`
 	${(props: SelectableBoxProps) => (props.selected ? selectedBoxCSS : '')};
 	${(props: SelectableBoxProps) => (props.highlighted ? highlightedBoxCSS : nonHighlightedBoxCSS)};
 `;
-
-interface ReleaseHistoryFiltersProps extends Omit<UseRouterObejct<{}>, 'match'>, BoxProps {
-	urlParams: URLSearchParams;
-	filters: string[];
-}
-
-function ReleaseHistoryFilters({ location, history, urlParams, filters, ...boxProps }: ReleaseHistoryFiltersProps) {
-	const isScaleEnabled = filters.indexOf('scale') !== -1;
-
-	const rhfToggleChangeHanlder = (filterName: string, e: React.ChangeEvent<HTMLInputElement>) => {
-		const rhfParam = urlParams.getAll('rhf');
-		const rhf = new Set(rhfParam.length ? rhfParam : filters);
-		if (e.target.checked) {
-			rhf.add(filterName);
-		} else {
-			rhf.delete(filterName);
-			if (filterName === 'code' && rhfParam.indexOf(filterName) === -1) {
-				// turning off 'code' will turn on 'env'
-				rhf.add('env');
-			}
-		}
-		if (rhf.has('code') && rhf.size === 1) {
-			// 'code' is the default so remove it when it's the only one
-			rhf.delete('code');
-		}
-		const nextUrlParams = new URLSearchParams(urlParams);
-		nextUrlParams.delete('rhf');
-		rhf.forEach((v) => nextUrlParams.append('rhf', v));
-		nextUrlParams.sort();
-		history.replace(location.pathname + '?' + nextUrlParams.toString());
-	};
-
-	return (
-		<Box direction="row" gap="medium" margin={{ bottom: 'medium' }} {...boxProps}>
-			<CheckBox
-				toggle
-				checked={filters.indexOf('code') > -1}
-				label="Code"
-				onChange={(e: React.ChangeEvent<HTMLInputElement>) => rhfToggleChangeHanlder('code', e)}
-			/>
-
-			<CheckBox
-				toggle
-				checked={filters.indexOf('env') > -1}
-				label="Env"
-				onChange={(e: React.ChangeEvent<HTMLInputElement>) => rhfToggleChangeHanlder('env', e)}
-			/>
-
-			<CheckBox
-				toggle
-				checked={isScaleEnabled}
-				label="Scale"
-				onChange={(e: React.ChangeEvent<HTMLInputElement>) => rhfToggleChangeHanlder('scale', e)}
-			/>
-		</Box>
-	);
-}
 
 interface ReleaseHistoryReleaseProps extends BoxProps {
 	selected: boolean;
@@ -292,8 +234,8 @@ export default function ReleaseHistory({ appName }: Props) {
 		[currentReleaseName]
 	);
 
-	const { history, location, urlParams } = useRouter();
-	const releasesListFilters = [urlParams.getAll('rhf'), ['code']].find((i) => i.length > 0) as string[];
+	const { urlParams } = useRouter();
+	const releasesListFilters = [urlParams.getAll('rhf'), ['code', 'env', 'scale']].find((i) => i.length > 0) as string[];
 
 	const rhf = releasesListFilters;
 	const isCodeReleaseEnabled = React.useMemo(
@@ -480,13 +422,6 @@ export default function ReleaseHistory({ appName }: Props) {
 			) : null}
 
 			<form onSubmit={submitHandler}>
-				<ReleaseHistoryFilters
-					location={location}
-					history={history}
-					filters={releasesListFilters}
-					urlParams={urlParams}
-				/>
-
 				<Box tag="ul">
 					{mapHistory(
 						deployments,
