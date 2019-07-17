@@ -170,8 +170,9 @@ function ReleaseHistoryScale({
 									return m;
 								}
 								let val = op.value;
+								let prevVal = s.getOldProcessesMap().get(op.key);
 								if (op.op === 'keep') {
-									val = s.getOldProcessesMap().get(op.key);
+									val = prevVal;
 								}
 								m.push(
 									<ProcessScale
@@ -180,6 +181,8 @@ function ReleaseHistoryScale({
 										margin="small"
 										size="small"
 										value={val as number}
+										originalValue={prevVal}
+										showDelta
 										label={op.key}
 									/>
 								);

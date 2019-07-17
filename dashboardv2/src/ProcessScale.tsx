@@ -39,6 +39,7 @@ export interface Props extends BoxProps {
 	value: number;
 	originalValue?: number;
 	showDelta?: boolean;
+	showLabelDelta?: boolean;
 	label: string;
 	size?: 'small' | 'large';
 	editable?: boolean;
@@ -65,6 +66,7 @@ export default function ProcessScale({
 	value: initialValue,
 	originalValue = 0,
 	showDelta = false,
+	showLabelDelta = false,
 	label,
 	size = 'large',
 	editable = false,
@@ -76,17 +78,16 @@ export default function ProcessScale({
 }: Props) {
 	const [value, setValue] = React.useState(initialValue);
 
-	const labelWithDelta = React.useMemo(
+	const delta = React.useMemo(() => value - originalValue, [originalValue, value]);
+	const deltaText = React.useMemo(
 		() => {
-			let delta = value - originalValue;
 			let sign = '+';
 			if (delta < 0) {
 				sign = '-';
 			}
-			delta = Math.abs(delta);
-			return delta !== 0 ? `${label} (${sign}${delta})` : label;
+			return ` (${sign}${Math.abs(delta)})`;
 		},
-		[label, originalValue, value]
+		[delta]
 	);
 
 	// Handle rapid changes as single change
@@ -139,7 +140,13 @@ export default function ProcessScale({
 	};
 
 	return (
-		<Box align="center" border="all" round {...boxProps}>
+		<Box
+			align="center"
+			border="all"
+			round
+			title={showDelta ? `Scaled ${delta > 0 ? 'up ' : delta < 0 ? 'down ' : ''}to ${value}${deltaText}` : ''}
+			{...boxProps}
+		>
 			<Box
 				direction="row"
 				align="center"
@@ -157,6 +164,13 @@ export default function ProcessScale({
 						}
 						value={value}
 					/>
+				) : showDelta ? (
+					<Box direction="row" pad="xsmall">
+						<Box justify="center">{delta > 0 ? <LinkUpIcon /> : delta < 0 ? <LinkDownIcon /> : null}</Box>
+						<ValueText size={size} onClick={() => (editable ? setValueEditable(true) : void 0)}>
+							{value}
+						</ValueText>
+					</Box>
 				) : (
 					<ValueText size={size} onClick={() => (editable ? setValueEditable(true) : void 0)}>
 						{value}
@@ -177,7 +191,7 @@ export default function ProcessScale({
 					</Box>
 				) : null}
 			</Box>
-			<LabelText>{showDelta ? labelWithDelta : label}</LabelText>
+			<LabelText>{showLabelDelta ? `${label}${deltaText}` : label}</LabelText>
 		</Box>
 	);
 }

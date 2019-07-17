@@ -92,7 +92,7 @@ export default function ProcessesDiff({
 								}}
 								value={val}
 								originalValue={startVal}
-								showDelta={!isPending}
+								showLabelDelta={!isPending}
 								label={key}
 							/>
 						</Box>
