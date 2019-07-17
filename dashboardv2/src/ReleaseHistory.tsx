@@ -68,18 +68,29 @@ function mapHistory<T>(
 
 interface SelectableBoxProps {
 	selected: boolean;
+	highlighted: boolean;
 }
 
 const selectedBoxCSS = `
 	background-color: var(--active);
 `;
 
+const highlightedBoxCSS = `
+	border-left: 4px solid var(--brand);
+`;
+
+const nonHighlightedBoxCSS = `
+	border-left: 4px solid transparent;
+`;
+
 const SelectableBox = styled(Box)`
 	&:hover {
 		background-color: var(--active);
 	}
+	padding-left: 2px;
 
 	${(props: SelectableBoxProps) => (props.selected ? selectedBoxCSS : '')};
+	${(props: SelectableBoxProps) => (props.highlighted ? highlightedBoxCSS : nonHighlightedBoxCSS)};
 `;
 
 interface ReleaseHistoryFiltersProps extends Omit<UseRouterObejct<{}>, 'match'>, BoxProps {
@@ -156,7 +167,7 @@ function ReleaseHistoryRelease({
 	...boxProps
 }: ReleaseHistoryReleaseProps) {
 	return (
-		<SelectableBox selected={selected} {...boxProps}>
+		<SelectableBox selected={selected} highlighted={isCurrent} {...boxProps}>
 			<label>
 				<CheckBox
 					checked={selected}
@@ -186,7 +197,7 @@ function ReleaseHistoryScale({
 	const releaseID = s.getParent().split('/')[3];
 	const diff = protoMapDiff(s.getOldProcessesMap(), s.getNewProcessesMap(), DiffOption.INCLUDE_UNCHANGED);
 	return (
-		<SelectableBox selected={selected} {...boxProps}>
+		<SelectableBox selected={selected} highlighted={isCurrent} {...boxProps}>
 			<label>
 				<CheckBox
 					checked={selected}
