@@ -84,9 +84,21 @@ function DashboardInner() {
 	);
 }
 
+const greenHexColor = '#1BB45E';
+const modifiedAruba = Object.assign({}, aruba, {
+	global: Object.assign({}, (aruba as any).global, {
+		colors: Object.assign({}, (aruba as any).global.colors, {
+			brand: greenHexColor,
+			control: Object.assign({}, (aruba as any).global.colors.control, {
+				light: greenHexColor
+			})
+		})
+	})
+});
+
 export default function Dashboard() {
 	return (
-		<Grommet full theme={aruba} cssVars>
+		<Grommet full theme={modifiedAruba} cssVars>
 			<Router>
 				<DashboardInner />
 			</Router>
