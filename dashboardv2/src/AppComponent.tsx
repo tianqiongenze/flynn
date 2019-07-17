@@ -72,9 +72,9 @@ export default function AppComponent({ name }: Props) {
 	);
 
 	const formationEditorNavProtectionContext = React.useMemo(() => buildNavProtectionContext('s=0'), []);
-	const releaseHistoryNavProtectionContext = React.useMemo(() => buildNavProtectionContext('s=1'), []);
-	const envEditorNavProtectionContext = React.useMemo(() => buildNavProtectionContext('s=2'), []);
-	const metadataEditorNavProtectionContext = React.useMemo(() => buildNavProtectionContext('s=3'), []);
+	const envEditorNavProtectionContext = React.useMemo(() => buildNavProtectionContext('s=1'), []);
+	const metadataEditorNavProtectionContext = React.useMemo(() => buildNavProtectionContext('s=2'), []);
+	const releaseHistoryNavProtectionContext = React.useMemo(() => buildNavProtectionContext('s=3'), []);
 
 	const { history, location, urlParams } = useRouter();
 	const activePanelIndices = urlParams.getAll('s').map((i: string) => parseInt(i, 10));
@@ -120,17 +120,7 @@ export default function AppComponent({ name }: Props) {
 					</Box>
 				</AccordionPanel>
 
-				<AccordionPanel label="Release History">
-					<Box pad="medium">
-						<React.Suspense fallback={<Loading />}>
-							<NavProtectionContext.Provider value={releaseHistoryNavProtectionContext}>
-								<ReleaseHistory appName={app.getName()} />
-							</NavProtectionContext.Provider>
-						</React.Suspense>
-					</Box>
-				</AccordionPanel>
-
-				<AccordionPanel label="Environment">
+				<AccordionPanel label="Environment Variables">
 					<Box pad="medium">
 						<React.Suspense fallback={<Loading />}>
 							<NavProtectionContext.Provider value={envEditorNavProtectionContext}>
@@ -145,6 +135,16 @@ export default function AppComponent({ name }: Props) {
 						<React.Suspense fallback={<Loading />}>
 							<NavProtectionContext.Provider value={metadataEditorNavProtectionContext}>
 								<MetadataEditor appName={app.getName()} />
+							</NavProtectionContext.Provider>
+						</React.Suspense>
+					</Box>
+				</AccordionPanel>
+
+				<AccordionPanel label="Release History">
+					<Box pad="medium">
+						<React.Suspense fallback={<Loading />}>
+							<NavProtectionContext.Provider value={releaseHistoryNavProtectionContext}>
+								<ReleaseHistory appName={app.getName()} />
 							</NavProtectionContext.Provider>
 						</React.Suspense>
 					</Box>
