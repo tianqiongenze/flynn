@@ -332,6 +332,9 @@ export default function KeyValueEditor({
 									onSuggestionSelect={keyChangeHandler.bind(null, index)}
 									onPaste={handlePaste.bind(null, index, 0)}
 								/>
+								<Box flex="grow" justify="center">
+									=
+								</Box>
 								<KeyValueInput
 									refHandler={inputRefHandler.bind(null, index, 1)}
 									placeholder={valuePlaceholder}
