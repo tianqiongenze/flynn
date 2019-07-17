@@ -1,7 +1,12 @@
 import * as React from 'react';
 
-import { Checkmark as CheckmarkIcon, Copy as CopyIcon, StatusWarning as WarningIcon } from 'grommet-icons';
-import { Box, Button, TextInput } from 'grommet';
+import {
+	Search as SearchIcon,
+	Checkmark as CheckmarkIcon,
+	Copy as CopyIcon,
+	StatusWarning as WarningIcon
+} from 'grommet-icons';
+import { Box, Button, TextInput, Stack } from 'grommet';
 import Notification from '../Notification';
 import copyToClipboard from '../util/copyToClipboard';
 import {
@@ -44,6 +49,7 @@ export interface Props {
 	valuePlaceholder?: string;
 	submitLabel?: string;
 	conflictsMessage?: string;
+	copyButtonTitle?: string;
 	suggestions?: Suggestion[];
 }
 
@@ -98,6 +104,7 @@ export default function KeyValueEditor({
 	valuePlaceholder = 'Value',
 	submitLabel = 'Review Changes',
 	conflictsMessage = 'Some entries have conflicts',
+	copyButtonTitle = 'Copy data to clipboard',
 	suggestions = []
 }: Props) {
 	const hasConflicts = React.useMemo(() => (data.conflicts || []).length > 0, [data.conflicts]);
@@ -293,12 +300,20 @@ export default function KeyValueEditor({
 		>
 			<Box direction="column" gap="xsmall">
 				{hasConflicts ? <Notification status="warning" message={conflictsMessage} /> : null}
-				<TextInput
-					type="search"
-					value={searchInputValue}
-					onChange={searchInputHandler}
-					onBlur={flushSearchInputValue}
-				/>
+				<Stack fill anchor="right" interactiveChild="last" guidingChild="last">
+					<Box fill="vertical" justify="between" margin="xsmall">
+						<SearchIcon />
+					</Box>
+					<TextInput
+						type="search"
+						title="Filter by key"
+						placeholder="Type to filter by key"
+						value={searchInputValue}
+						onChange={searchInputHandler}
+						onBlur={flushSearchInputValue}
+						style={{ paddingRight: '32px' }}
+					/>
+				</Stack>
 				{mapEntries(
 					data,
 					([key, value, { rebaseConflict, originalValue }]: Entry, index: number) => {
@@ -342,7 +357,7 @@ export default function KeyValueEditor({
 				label={submitLabel}
 			/>
 			&nbsp;
-			<Button type="button" icon={<CopyIcon />} onClick={handleCopyButtonClick} />
+			<Button title={copyButtonTitle} type="button" icon={<CopyIcon />} onClick={handleCopyButtonClick} />
 		</form>
 	);
 }
