@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Github as GithubIcon } from 'grommet-icons';
-import { Box, Heading, Accordion, AccordionPanel } from 'grommet';
+import { Heading, Accordion, AccordionPanel } from 'grommet';
 
 import { isNotFoundError } from './client';
 import useApp from './useApp';
@@ -71,11 +71,6 @@ export default function AppComponent({ name }: Props) {
 		[app]
 	);
 
-	const formationEditorNavProtectionContext = React.useMemo(() => buildNavProtectionContext('s=0'), []);
-	const envEditorNavProtectionContext = React.useMemo(() => buildNavProtectionContext('s=1'), []);
-	const metadataEditorNavProtectionContext = React.useMemo(() => buildNavProtectionContext('s=2'), []);
-	const releaseHistoryNavProtectionContext = React.useMemo(() => buildNavProtectionContext('s=3'), []);
-
 	const { history, location, urlParams } = useRouter();
 	const activePanelIndices = urlParams.getAll('s').map((i: string) => parseInt(i, 10));
 	const handlePanelSectionChange = (activePanelIndices: number[]) => {
@@ -94,9 +89,11 @@ export default function AppComponent({ name }: Props) {
 		return null;
 	}
 
+	let panelIndex = 0;
+
 	return (
 		<>
-			<Heading>
+			<Heading margin="xsmall">
 				<>
 					{app.getDisplayName()}
 					{githubURL ? (
@@ -110,46 +107,39 @@ export default function AppComponent({ name }: Props) {
 				</>
 			</Heading>
 			<Accordion multiple animate={false} onActive={handlePanelSectionChange} activeIndex={activePanelIndices}>
-				<AccordionPanel label="Scale">
-					<Box pad="medium">
-						<React.Suspense fallback={<Loading />}>
-							<NavProtectionContext.Provider value={formationEditorNavProtectionContext}>
-								<FormationEditor appName={app.getName()} />
-							</NavProtectionContext.Provider>
-						</React.Suspense>
-					</Box>
-				</AccordionPanel>
+				<AppComponentPanel label="Scale" index={panelIndex++}>
+					<FormationEditor appName={app.getName()} />
+				</AppComponentPanel>
 
-				<AccordionPanel label="Environment Variables">
-					<Box pad="medium">
-						<React.Suspense fallback={<Loading />}>
-							<NavProtectionContext.Provider value={envEditorNavProtectionContext}>
-								<EnvEditor appName={app.getName()} />
-							</NavProtectionContext.Provider>
-						</React.Suspense>
-					</Box>
-				</AccordionPanel>
+				<AppComponentPanel label="Environment Variables" index={panelIndex++}>
+					<EnvEditor appName={app.getName()} />
+				</AppComponentPanel>
 
-				<AccordionPanel label="Metadata">
-					<Box pad="medium">
-						<React.Suspense fallback={<Loading />}>
-							<NavProtectionContext.Provider value={metadataEditorNavProtectionContext}>
-								<MetadataEditor appName={app.getName()} />
-							</NavProtectionContext.Provider>
-						</React.Suspense>
-					</Box>
-				</AccordionPanel>
+				<AppComponentPanel label="Metadata" index={panelIndex++}>
+					<MetadataEditor appName={app.getName()} />
+				</AppComponentPanel>
 
-				<AccordionPanel label="Release History">
-					<Box pad="medium">
-						<React.Suspense fallback={<Loading />}>
-							<NavProtectionContext.Provider value={releaseHistoryNavProtectionContext}>
-								<ReleaseHistory appName={app.getName()} />
-							</NavProtectionContext.Provider>
-						</React.Suspense>
-					</Box>
-				</AccordionPanel>
+				<AppComponentPanel label="Release History" index={panelIndex++}>
+					<ReleaseHistory appName={app.getName()} />
+				</AppComponentPanel>
 			</Accordion>
 		</>
 	);
 }
+
+interface AppComponentPanelProps {
+	label: string;
+	index: number;
+	children: React.ReactNode;
+}
+
+const AppComponentPanel = ({ label, index, children }: AppComponentPanelProps) => {
+	const navProtectionContext = React.useMemo(() => buildNavProtectionContext(`s=${index}`), [index]);
+	return (
+		<AccordionPanel label={label}>
+			<React.Suspense fallback={<Loading />}>
+				<NavProtectionContext.Provider value={navProtectionContext}>{children}</NavProtectionContext.Provider>
+			</React.Suspense>
+		</AccordionPanel>
+	);
+};

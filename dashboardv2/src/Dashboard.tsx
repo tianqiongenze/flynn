@@ -46,20 +46,20 @@ function DashboardInner() {
 	return (
 		<Split>
 			<Box tag="aside" basis="medium" flex={false} background="neutral-1" fill>
-				<Box tag="header" pad="medium">
+				<Box tag="header" pad="small">
 					<h1>Flynn Dashboard</h1>
 				</Box>
-				<Box>
+				<Box flex>
 					<AppsListNav />
 				</Box>
-				<Box tag="footer" direction="row" pad="small" align="center" background="grey-1">
-					<Paragraph size="small">
+				<Box tag="footer" alignSelf="center">
+					<Paragraph size="small" margin="xsmall">
 						Flynn is designed, built, and managed by Prime Directive, Inc.
 						<br />
 						&copy; 2013-
 						{new Date().getFullYear()} Prime Directive, Inc. Flynn® is a trademark of Prime Directive, Inc.
 					</Paragraph>
-					<Paragraph size="small">
+					<Paragraph size="small" margin="xsmall">
 						<ExternalAnchor href="https://flynn.io/legal/privacy">Privacy Policy</ExternalAnchor>
 						&nbsp;|&nbsp;
 						<ExternalAnchor href="https://flynn.io/docs/trademark-guidelines">Trademark Guidelines</ExternalAnchor>
@@ -67,7 +67,7 @@ function DashboardInner() {
 				</Box>
 			</Box>
 
-			<Box pad="medium" fill overflow="scroll" gap="small">
+			<Box pad="xsmall" fill overflow="scroll" gap="small">
 				<DisplayErrors />
 				<React.Suspense fallback={<Loading />}>
 					<Switch>

@@ -141,7 +141,7 @@ export default function FormationEditor({ appName }: Props) {
 	const isPending = scale.getState() === ScaleRequestState.SCALE_PENDING;
 
 	return (
-		<form onSubmit={isConfirming ? handleConfirmSubmit : handleSubmit}>
+		<Box as="form" onSubmit={isConfirming ? handleConfirmSubmit : handleSubmit} margin={{ bottom: 'xsmall' }}>
 			{isConfirming || isCreating || isPending ? (
 				<ProcessesDiff
 					scale={scale}
@@ -149,7 +149,7 @@ export default function FormationEditor({ appName }: Props) {
 					onConfirmScaleToZeroChange={(c) => setIsScaleToZeroConfirmed(c)}
 				/>
 			) : (
-				<Box direction="row" gap="small">
+				<Box direction="row" gap="small" margin={{ bottom: 'xsmall' }}>
 					{processes.length === 0 ? (
 						<Text color="dark-2">&lt;No processes&gt;</Text>
 					) : (
@@ -168,48 +168,48 @@ export default function FormationEditor({ appName }: Props) {
 					)}
 				</Box>
 			)}
-			<br />
-			<br />
-			{hasChanges && !isPending ? (
-				isConfirming ? (
-					<>
-						<Button
-							type="submit"
-							primary={true}
-							label="Confirm and Create Scale Request"
-							disabled={!isScaleToZeroConfirmed}
-						/>
-						&nbsp;
-						<Button
-							type="button"
-							label="Cancel"
-							onClick={(e: React.SyntheticEvent) => {
-								e.preventDefault();
-								setIsConfirming(false);
-							}}
-						/>
-					</>
-				) : isCreating ? (
-					<>
-						<Button disabled primary={true} label="Creating Scale Request" />
-					</>
+			<Box direction="row">
+				{hasChanges && !isPending ? (
+					isConfirming ? (
+						<>
+							<Button
+								type="submit"
+								primary={true}
+								label="Confirm and Create Scale Request"
+								disabled={!isScaleToZeroConfirmed}
+							/>
+							&nbsp;
+							<Button
+								type="button"
+								label="Cancel"
+								onClick={(e: React.SyntheticEvent) => {
+									e.preventDefault();
+									setIsConfirming(false);
+								}}
+							/>
+						</>
+					) : isCreating ? (
+						<>
+							<Button disabled primary={true} label="Creating Scale Request" />
+						</>
+					) : (
+						<>
+							<Button type="submit" primary={true} label="Create Scale Request" />
+							&nbsp;
+							<Button
+								type="button"
+								label="Reset"
+								onClick={(e: React.SyntheticEvent) => {
+									e.preventDefault();
+									setProcesses(buildProcessesArray(initialProcesses));
+								}}
+							/>
+						</>
+					)
 				) : (
-					<>
-						<Button type="submit" primary={true} label="Create Scale Request" />
-						&nbsp;
-						<Button
-							type="button"
-							label="Reset"
-							onClick={(e: React.SyntheticEvent) => {
-								e.preventDefault();
-								setProcesses(buildProcessesArray(initialProcesses));
-							}}
-						/>
-					</>
-				)
-			) : (
-				<Button disabled type="button" primary={true} label="Create Scale Request" />
-			)}
-		</form>
+					<Button disabled type="button" primary={true} label="Create Scale Request" />
+				)}
+			</Box>
+		</Box>
 	);
 }
