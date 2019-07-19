@@ -130,6 +130,25 @@ const SelectableBox = styled(Box)`
 	${(props: SelectableBoxProps) => (props.highlighted ? highlightedBoxCSS : nonHighlightedBoxCSS)};
 `;
 
+const StickyBox = styled(Box)`
+	position: sticky;
+	top: -1px;
+`;
+
+interface ReleaseHistoryDateHeaderProps extends BoxProps {
+	date: Date;
+}
+
+function ReleaseHistoryDateHeader({ date, ...boxProps }: ReleaseHistoryDateHeaderProps) {
+	return (
+		<StickyBox {...boxProps}>
+			<Box round background="background" alignSelf="center" pad="small">
+				{isToday(date) ? 'Today' : date.toDateString()}
+			</Box>
+		</StickyBox>
+	);
+}
+
 interface ReleaseHistoryReleaseProps extends BoxProps {
 	selected: boolean;
 	isCurrent: boolean;
@@ -467,11 +486,7 @@ export default function ReleaseHistory({ appName }: Props) {
 					{mapHistory({
 						deployments,
 						scales: isScaleEnabled ? scales : [],
-						renderDate: (key, date) => (
-							<Box key={key} tag="li" align="center" margin="xsmall">
-								{isToday(date) ? 'Today' : date.toDateString()}
-							</Box>
-						),
+						renderDate: (key, date) => <ReleaseHistoryDateHeader key={key} date={date} tag="li" margin="xsmall" />,
 						renderRelease: (key, [r, p]) => (
 							<ReleaseHistoryRelease
 								key={key}
