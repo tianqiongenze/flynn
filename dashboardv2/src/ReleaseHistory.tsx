@@ -31,18 +31,46 @@ import ReleaseComponent from './Release';
 import protoMapDiff, { Diff, DiffOp, DiffOption } from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
 
-function mapHistory<T>(
-	deployments: ExpandedDeployment[],
-	scales: ScaleRequest[],
-	rfn: (key: string, releases: [Release, Release | null], index: number) => T,
-	sfn: (key: string, scaleRequest: ScaleRequest, index: number) => T
-): T[] {
+interface MapHistoryProps<T> {
+	deployments: ExpandedDeployment[];
+	scales: ScaleRequest[];
+	renderDate: (key: string, date: Date) => T;
+	renderRelease: (key: string, releases: [Release, Release | null], index: number) => T;
+	renderScale: (key: string, scaleRequest: ScaleRequest, index: number) => T;
+}
+
+function roundedDate(d: Date): Date {
+	const out = new Date(d);
+	out.setMilliseconds(0);
+	out.setSeconds(0);
+	out.setMinutes(0);
+	out.setHours(0);
+	return out;
+}
+
+const TODAY = roundedDate(new Date());
+
+function isToday(d: Date): boolean {
+	if (d.getFullYear() !== TODAY.getFullYear()) {
+		return false;
+	}
+	if (d.getMonth() !== TODAY.getMonth()) {
+		return false;
+	}
+	if (d.getDate() !== TODAY.getDate()) {
+		return false;
+	}
+	return true;
+}
+
+function mapHistory<T>({ deployments, scales, renderRelease, renderScale, renderDate }: MapHistoryProps<T>): T[] {
 	const res = [] as T[];
 	const dlen = deployments.length;
 	const slen = scales.length;
 	let i = 0;
 	let di = 0;
 	let si = 0;
+	let date: Date | null = null;
 	while (di < dlen || si < slen) {
 		let d = deployments[di];
 		let r = d ? d.getNewRelease() || null : null;
@@ -50,17 +78,27 @@ function mapHistory<T>(
 		const dt = d ? (d.getCreateTime() as timestamp_pb.Timestamp).toDate() : null;
 		const s = scales[si];
 		const st = s ? (s.getCreateTime() as timestamp_pb.Timestamp).toDate() : null;
+		let prevDate = date;
+		let el: T;
 		if ((dt && st && dt > st) || (dt && !st)) {
-			res.push(rfn(d.getName(), [r as Release, pr], i));
+			date = roundedDate(dt);
+			el = renderRelease(d.getName(), [r as Release, pr], i);
 			di++;
 			i++;
 		} else if (st) {
-			res.push(sfn(s.getName(), s, i));
+			date = roundedDate(st);
+			el = renderScale(s.getName(), s, i);
 			si++;
 			i++;
 		} else {
 			break;
 		}
+
+		if (prevDate === null || date < prevDate) {
+			res.push(renderDate(date.toDateString(), date));
+		}
+
+		res.push(el);
 	}
 	return res;
 }
@@ -426,10 +464,15 @@ export default function ReleaseHistory({ appName }: Props) {
 
 			<form onSubmit={submitHandler}>
 				<Box tag="ul">
-					{mapHistory(
+					{mapHistory({
 						deployments,
-						isScaleEnabled ? scales : [],
-						(key, [r, p]) => (
+						scales: isScaleEnabled ? scales : [],
+						renderDate: (key, date) => (
+							<Box key={key} tag="li" align="center" margin="xsmall">
+								{isToday(date) ? 'Today' : date.toDateString()}
+							</Box>
+						),
+						renderRelease: (key, [r, p]) => (
 							<ReleaseHistoryRelease
 								key={key}
 								tag="li"
@@ -449,7 +492,7 @@ export default function ReleaseHistory({ appName }: Props) {
 								}}
 							/>
 						),
-						(key, s) => (
+						renderScale: (key, s) => (
 							<ReleaseHistoryScale
 								key={key}
 								tag="li"
@@ -468,7 +511,7 @@ export default function ReleaseHistory({ appName }: Props) {
 								}}
 							/>
 						)
-					)}
+					})}
 				</Box>
 
 				{selectedResourceType === SelectedResourceType.ScaleRequest ? (
