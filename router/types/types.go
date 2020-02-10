@@ -15,6 +15,11 @@ type Certificate struct {
 	Cert string `json:"cert,omitempty"`
 	// TLSCert is the optional TLS private key. It is only used for HTTP routes.
 	Key string `json:"key,omitempty"`
+	// Ref is a unique human readable reference for the certificate that is used
+	// in route config files.
+	Ref string `json:"ref,omitempty"`
+	// Meta is optional metadata about the certificate.
+	Meta map[string]string `json:"meta,omitempty"`
 	// CreatedAt is the time this cert was created.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt is the time this cert was last updated.
@@ -45,6 +50,9 @@ type Route struct {
 
 	// Domain is the domain name of this Route. It is only used for HTTP routes.
 	Domain string `json:"domain,omitempty"`
+
+	// CertificateRef is the ref of the certificate to use for this route.
+	CertificateRef string `json:"certificate_ref,omitempty"`
 
 	// Certificate contains TLSCert and TLSKey
 	Certificate *Certificate `json:"certificate,omitempty"`

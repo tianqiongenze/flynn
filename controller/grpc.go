@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"encoding/pem"
 	fmt "fmt"
 	"net"
 	"strings"
@@ -992,7 +994,7 @@ outer:
 		allRoutes = append(allRoutes, routes...)
 		apiRoutes := make([]*api.Route, len(routes))
 		for i, route := range routes {
-			apiRoutes[i] = data.ToAPIRoute(route)
+			apiRoutes[i] = api.NewRoute(route)
 		}
 		res.AppRoutes[i] = &api.AppRoutes{
 			App:    "apps/" + app.ID,
@@ -1000,9 +1002,77 @@ outer:
 		}
 	}
 
-	// add the route state to the response
-	res.State = data.RouteState(allRoutes)
-
 	// return the response
 	return res, nil
+}
+
+func (g *grpcAPI) ListCertificates(ctx context.Context, req *api.ListCertificatesRequest) (*api.ListCertificatesResponse, error) {
+	certs, err := g.routeRepo.ListCertificates()
+	if err != nil {
+		return nil, err
+	}
+	apiCerts := make([]*api.Certificate, len(certs))
+	for i, cert := range certs {
+		apiCerts[i] = api.NewCertificate(cert)
+	}
+	return &api.ListCertificatesResponse{
+		Certificates: apiCerts,
+	}, nil
+}
+
+func (g *grpcAPI) GetCertificate(ctx context.Context, req *api.GetCertificateRequest) (*api.GetCertificateResponse, error) {
+	cert, err := g.routeRepo.GetCertificate(req.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &api.GetCertificateResponse{
+		Certificate: api.NewCertificate(cert),
+	}, nil
+}
+
+func (g *grpcAPI) CreateCertificate(ctx context.Context, req *api.CreateCertificateRequest) (*api.CreateCertificateResponse, error) {
+	// expect a static certificate
+	v, ok := req.Certificate.(*api.CreateCertificateRequest_Static_)
+	if !ok {
+		return nil, status.Error(codes.InvalidArgument, "only static certificates are supported")
+	}
+	staticCert := v.Static
+
+	// PEM encode the key and certificate chain
+	var certPEM bytes.Buffer
+	for _, certBytes := range staticCert.Chain {
+		if err := pem.Encode(&certPEM, &pem.Block{Type: "CERTIFICATE", Bytes: certBytes}); err != nil {
+			return nil, err
+		}
+	}
+	var keyPEM bytes.Buffer
+	if err := pem.Encode(&keyPEM, &pem.Block{Type: "PRIVATE KEY", Bytes: staticCert.PrivateKey}); err != nil {
+		return nil, err
+	}
+	cert := &router.Certificate{
+		Cert: certPEM.String(),
+		Key:  keyPEM.String(),
+		Ref:  req.Ref,
+		Meta: req.Meta,
+	}
+
+	// add the certificate to the db
+	if err := g.routeRepo.AddCertificate(cert, staticCert.Force); err != nil {
+		return nil, err
+	}
+
+	// return the created certificate
+	return &api.CreateCertificateResponse{
+		Certificate: api.NewCertificate(cert),
+	}, nil
+}
+
+func (g *grpcAPI) DeleteCertificate(ctx context.Context, req *api.DeleteCertificateRequest) (*api.DeleteCertificateResponse, error) {
+	cert, err := g.routeRepo.DeleteCertificate(req.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &api.DeleteCertificateResponse{
+		Certificate: api.NewCertificate(cert),
+	}, nil
 }

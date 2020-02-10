@@ -311,6 +311,10 @@ func formatRouteConfig(route *api.Route) string {
 	}
 	lines = append(lines, service)
 
+	if r.CertificateRef != "" {
+		lines = append(lines, "certificate: "+r.CertificateRef)
+	}
+
 	if r.Sticky {
 		lines = append(lines, "sticky sessions: true")
 	}
@@ -359,7 +363,7 @@ func runRouteAddHTTP(args *docopt.Args, client controller.Client) error {
 		service = mustApp() + "-web"
 	}
 
-	tlsCert, tlsKey, err := parseTLSCert(args)
+	tlsCert, tlsKey, err := parseTLSCert(args.String["--tls-cert"], args.String["--tls-key"])
 	if err != nil {
 		return err
 	}
@@ -441,7 +445,7 @@ func runRouteUpdateHTTP(args *docopt.Args, client controller.Client) error {
 	}
 
 	route.Certificate = nil
-	route.LegacyTLSCert, route.LegacyTLSKey, err = parseTLSCert(args)
+	route.LegacyTLSCert, route.LegacyTLSKey, err = parseTLSCert(args.String["--tls-cert"], args.String["--tls-key"])
 	if err != nil {
 		return err
 	}
@@ -471,15 +475,13 @@ func runRouteUpdateHTTP(args *docopt.Args, client controller.Client) error {
 	return nil
 }
 
-func parseTLSCert(args *docopt.Args) (string, string, error) {
-	tlsCertPath := args.String["--tls-cert"]
-	tlsKeyPath := args.String["--tls-key"]
+func parseTLSCert(certFile, keyFile string) (string, string, error) {
 	var tlsCert []byte
 	var tlsKey []byte
-	if tlsCertPath != "" && tlsKeyPath != "" {
+	if certFile != "" && keyFile != "" {
 		var stdin []byte
 
-		if tlsCertPath == "-" || tlsKeyPath == "-" {
+		if certFile == "-" || keyFile == "-" {
 			var err error
 			stdin, err = ioutil.ReadAll(os.Stdin)
 			if err != nil {
@@ -488,15 +490,15 @@ func parseTLSCert(args *docopt.Args) (string, string, error) {
 		}
 
 		var err error
-		tlsCert, err = readPEM("CERTIFICATE", tlsCertPath, stdin)
+		tlsCert, err = readPEM("CERTIFICATE", certFile, stdin)
 		if err != nil {
 			return "", "", fmt.Errorf("Failed to read TLS cert: %s", err)
 		}
-		tlsKey, err = readPEM("PRIVATE KEY", tlsKeyPath, stdin)
+		tlsKey, err = readPEM("PRIVATE KEY", keyFile, stdin)
 		if err != nil {
 			return "", "", fmt.Errorf("Failed to read TLS key: %s", err)
 		}
-	} else if tlsCertPath != "" || tlsKeyPath != "" {
+	} else if certFile != "" || keyFile != "" {
 		return "", "", errors.New("Both the TLS certificate AND private key need to be specified")
 	}
 	return string(tlsCert), string(tlsKey), nil

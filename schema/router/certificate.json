@@ -26,6 +26,20 @@
         "$ref": "/schema/common#/definitions/id"
       }
     },
+    "ref": {
+      "type": "string",
+      "description": "A unique human readable reference for the certificate that is used in route config files."
+    },
+    "meta": {
+      "anyOf": [
+        {
+          "$ref": "/schema/controller/common#/definitions/meta"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "created_at": {
       "$ref": "/schema/common#/definitions/created_at"
     },

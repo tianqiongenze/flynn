@@ -7,9 +7,11 @@ import (
 )
 
 type Cert struct {
-	CACert string `json:"ca_cert"`
-	Cert   string `json:"cert"`
-	Pin    string `json:"pin"`
+	CACert string            `json:"ca_cert"`
+	Cert   string            `json:"cert"`
+	Pin    string            `json:"pin"`
+	Ref    string            `json:"ref"`
+	Meta   map[string]string `json:"meta"`
 
 	PrivateKey string `json:"key"`
 }

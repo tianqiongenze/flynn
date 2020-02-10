@@ -5,10 +5,12 @@ import (
 	"crypto/md5"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
-	"path"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/flynn/flynn/pkg/httphelper"
 	hh "github.com/flynn/flynn/pkg/httphelper"
 	"github.com/flynn/flynn/pkg/postgres"
+	"github.com/flynn/flynn/pkg/random"
 	router "github.com/flynn/flynn/router/types"
 	"github.com/jackc/pgx"
 	cjson "github.com/tent/canonical-json-go"
@@ -64,8 +67,12 @@ func (r *RouteRepo) Set(routes []*api.AppRoutes, dryRun bool, expectedState []by
 		if err != nil {
 			return nil, nil, err
 		}
-		state := RouteState(existingRoutes)
-		changes, err := r.set(nil, routes, existingRoutes)
+		existingCerts, err := r.ListCertificates()
+		if err != nil {
+			return nil, nil, err
+		}
+		state := RouteState(existingRoutes, existingCerts)
+		changes, err := r.set(nil, routes, existingRoutes, existingCerts)
 		return changes, state, err
 	}
 
@@ -81,10 +88,15 @@ func (r *RouteRepo) Set(routes []*api.AppRoutes, dryRun bool, expectedState []by
 		tx.Rollback()
 		return nil, nil, err
 	}
+	existingCerts, err := r.listCertificatesForUpdate(tx)
+	if err != nil {
+		tx.Rollback()
+		return nil, nil, err
+	}
 
 	// if the request includes an expected state, check it matches the
 	// current state of the existing routes
-	currentState := RouteState(existingRoutes)
+	currentState := RouteState(existingRoutes, existingCerts)
 	if len(expectedState) > 0 {
 		if !bytes.Equal(expectedState, currentState) {
 			tx.Rollback()
@@ -94,7 +106,7 @@ func (r *RouteRepo) Set(routes []*api.AppRoutes, dryRun bool, expectedState []by
 	}
 
 	// set the routes and return the changes
-	changes, err := r.set(tx, routes, existingRoutes)
+	changes, err := r.set(tx, routes, existingRoutes, existingCerts)
 	if err != nil {
 		tx.Rollback()
 		return nil, nil, err
@@ -102,7 +114,7 @@ func (r *RouteRepo) Set(routes []*api.AppRoutes, dryRun bool, expectedState []by
 	return changes, currentState, tx.Commit()
 }
 
-func (r *RouteRepo) set(tx *postgres.DBTx, desiredAppRoutes []*api.AppRoutes, existingRoutes []*router.Route) ([]*api.RouteChange, error) {
+func (r *RouteRepo) set(tx *postgres.DBTx, desiredAppRoutes []*api.AppRoutes, existingRoutes []*router.Route, existingCerts []*router.Certificate) ([]*api.RouteChange, error) {
 	// determine which routes we are going to create, update or delete for each
 	// app first so that we can then apply them in the order we want to (e.g.
 	// we want to process all deletes before updates and creates to support
@@ -178,7 +190,7 @@ func (r *RouteRepo) set(tx *postgres.DBTx, desiredAppRoutes []*api.AppRoutes, ex
 	// (e.g. so a domain can be deleted from one app and added to another
 	// in the same request)
 	for _, routeToDelete := range deletes {
-		if err := r.validate(routeToDelete, existingRoutes, routeOpDelete); err != nil {
+		if err := r.validate(routeToDelete, existingRoutes, existingCerts, routeOpDelete); err != nil {
 			return nil, err
 		}
 		// actually perform the delete if we have a db transaction
@@ -189,7 +201,7 @@ func (r *RouteRepo) set(tx *postgres.DBTx, desiredAppRoutes []*api.AppRoutes, ex
 		}
 		changes = append(changes, &api.RouteChange{
 			Action: api.RouteChange_ACTION_DELETE,
-			Before: ToAPIRoute(routeToDelete),
+			Before: api.NewRoute(routeToDelete),
 		})
 		// remove the deleted route from the existing routes so it no
 		// longer affects validations
@@ -205,7 +217,7 @@ func (r *RouteRepo) set(tx *postgres.DBTx, desiredAppRoutes []*api.AppRoutes, ex
 
 	// process updates
 	for _, u := range updates {
-		if err := r.validate(u.updatedRoute, existingRoutes, routeOpUpdate); err != nil {
+		if err := r.validate(u.updatedRoute, existingRoutes, existingCerts, routeOpUpdate); err != nil {
 			return nil, err
 		}
 		// actually perform the update if we have a db transaction
@@ -216,8 +228,8 @@ func (r *RouteRepo) set(tx *postgres.DBTx, desiredAppRoutes []*api.AppRoutes, ex
 		}
 		changes = append(changes, &api.RouteChange{
 			Action: api.RouteChange_ACTION_UPDATE,
-			Before: ToAPIRoute(u.existingRoute),
-			After:  ToAPIRoute(u.updatedRoute),
+			Before: api.NewRoute(u.existingRoute),
+			After:  api.NewRoute(u.updatedRoute),
 		})
 		// replace the existing route with the updated one in
 		// the existing routes so that it affects future
@@ -235,7 +247,7 @@ func (r *RouteRepo) set(tx *postgres.DBTx, desiredAppRoutes []*api.AppRoutes, ex
 
 	// process creates
 	for _, newRoute := range creates {
-		if err := r.validate(newRoute, existingRoutes, routeOpCreate); err != nil {
+		if err := r.validate(newRoute, existingRoutes, existingCerts, routeOpCreate); err != nil {
 			return nil, err
 		}
 		// actually perform the create if we have a db transaction
@@ -246,7 +258,7 @@ func (r *RouteRepo) set(tx *postgres.DBTx, desiredAppRoutes []*api.AppRoutes, ex
 		}
 		changes = append(changes, &api.RouteChange{
 			Action: api.RouteChange_ACTION_CREATE,
-			After:  ToAPIRoute(newRoute),
+			After:  api.NewRoute(newRoute),
 		})
 		// add the new route to the existing routes so that
 		// it affects future validations
@@ -266,7 +278,12 @@ func (r *RouteRepo) Add(route *router.Route) error {
 		tx.Rollback()
 		return err
 	}
-	if err := r.validate(route, existingRoutes, routeOpCreate); err != nil {
+	existingCerts, err := r.listCertificatesForUpdate(tx)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := r.validate(route, existingRoutes, existingCerts, routeOpCreate); err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -322,21 +339,82 @@ func (r *RouteRepo) addTCP(tx *postgres.DBTx, route *router.Route) error {
 	).Scan(&route.ID, &route.Port, &route.CreatedAt, &route.UpdatedAt)
 }
 
-func (r *RouteRepo) addCertWithTx(tx *postgres.DBTx, cert *router.Certificate) error {
+var nonAlphaNumPattern = regexp.MustCompile(`[^a-zA-Z\d]+`)
+
+// genCertRef generates a ref for the given certificate as:
+//
+//   <cn>_v<n>
+//
+// where <cn> is the Subject Common Name from the certificate (sanitized to
+// include only letters, digits and underscores) and <n> is one more than the
+// number of existing certificates with <cn> as the prefix.
+//
+// For example:
+//
+//   app_example_com_v1
+//
+// If the Subject Common Name isn't set or can't be determined, then the
+// current date is used instead.
+//
+// If the number of existing certificates with <cn> as the prefix can't be
+// determined, then a random string is used instead.
+func genCertRef(db dbOrTx, cert, key string) string {
+	// determine the Subject Common Name
+	cn := func() string {
+		c, err := tls.X509KeyPair([]byte(cert), []byte(key))
+		if err != nil {
+			return ""
+		}
+		if len(c.Certificate) == 0 {
+			return ""
+		}
+		leaf, err := x509.ParseCertificate(c.Certificate[0])
+		if err != nil {
+			return ""
+		}
+		return leaf.Subject.CommonName
+	}()
+
+	// fallback to the current date
+	if cn == "" {
+		cn = time.Now().Format("20060102")
+	}
+
+	// sanitise the common name
+	cn = nonAlphaNumPattern.ReplaceAllString(cn, "_")
+
+	// determine the version, falling back to a random string
+	var n int64
+	if err := db.QueryRow("certificate_count_by_ref_prefix", cn).Scan(&n); err != nil {
+		return cn + "_v" + random.String(8)
+	}
+
+	return cn + "_v" + strconv.FormatInt(n+1, 10)
+}
+
+func (r *RouteRepo) addCert(db dbOrTx, cert *router.Certificate) error {
 	tlsCertSHA256 := sha256.Sum256([]byte(cert.Cert))
-	if err := tx.QueryRow(
+	if cert.Ref == "" {
+		cert.Ref = genCertRef(db, cert.Cert, cert.Key)
+	}
+	if cert.Meta == nil {
+		cert.Meta = make(map[string]string)
+	}
+	if err := db.QueryRow(
 		"certificate_insert",
 		cert.Cert,
 		cert.Key,
 		tlsCertSHA256[:],
+		cert.Ref,
+		cert.Meta,
 	).Scan(&cert.ID, &cert.CreatedAt, &cert.UpdatedAt); err != nil {
 		return err
 	}
 	for _, rid := range cert.Routes {
-		if err := tx.Exec("route_certificate_delete_by_route_id", rid); err != nil {
+		if err := db.Exec("route_certificate_delete_by_route_id", rid); err != nil {
 			return err
 		}
-		if err := tx.Exec("route_certificate_insert", rid, cert.ID); err != nil {
+		if err := db.Exec("route_certificate_insert", rid, cert.ID); err != nil {
 			return err
 		}
 	}
@@ -344,12 +422,22 @@ func (r *RouteRepo) addCertWithTx(tx *postgres.DBTx, cert *router.Certificate) e
 }
 
 func (r *RouteRepo) addRouteCertWithTx(tx *postgres.DBTx, route *router.Route) error {
+	// if the route has a certificate ref, load it from the database
+	if ref := route.CertificateRef; ref != "" {
+		cert, err := scanCertificate(tx.QueryRow("certificate_select", ref))
+		if err != nil {
+			return err
+		}
+		route.Certificate = cert
+	}
+
+	// create the certificate if set
 	cert := route.Certificate
 	if cert == nil || (len(cert.Cert) == 0 && len(cert.Key) == 0) {
 		return nil
 	}
 	cert.Routes = []string{route.ID}
-	if err := r.addCertWithTx(tx, cert); err != nil {
+	if err := r.addCert(tx, cert); err != nil {
 		return err
 	}
 	return nil
@@ -388,6 +476,8 @@ func scanHTTPRoute(s postgres.Scanner) (*router.Route, error) {
 		certRoutes    *string
 		certCert      *string
 		certKey       *string
+		certRef       *string
+		certMeta      *map[string]string
 		certCreatedAt *time.Time
 		certUpdatedAt *time.Time
 	)
@@ -408,6 +498,8 @@ func scanHTTPRoute(s postgres.Scanner) (*router.Route, error) {
 		&certRoutes,
 		&certCert,
 		&certKey,
+		&certRef,
+		&certMeta,
 		&certCreatedAt,
 		&certUpdatedAt,
 	); err != nil {
@@ -415,11 +507,14 @@ func scanHTTPRoute(s postgres.Scanner) (*router.Route, error) {
 	}
 	route.Type = "http"
 	if certID != nil {
+		route.CertificateRef = *certRef
 		route.Certificate = &router.Certificate{
 			ID:        *certID,
+			Routes:    splitPGStringArray(*certRoutes),
 			Cert:      *certCert,
 			Key:       *certKey,
-			Routes:    splitPGStringArray(*certRoutes),
+			Ref:       *certRef,
+			Meta:      *certMeta,
 			CreatedAt: *certCreatedAt,
 			UpdatedAt: *certUpdatedAt,
 		}
@@ -531,7 +626,12 @@ func (r *RouteRepo) Update(route *router.Route) error {
 		tx.Rollback()
 		return err
 	}
-	if err := r.validate(route, existingRoutes, routeOpUpdate); err != nil {
+	existingCerts, err := r.listCertificatesForUpdate(tx)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := r.validate(route, existingRoutes, existingCerts, routeOpUpdate); err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -624,7 +724,12 @@ func (r *RouteRepo) Delete(route *router.Route) error {
 		tx.Rollback()
 		return err
 	}
-	if err := r.validate(route, existingRoutes, routeOpDelete); err != nil {
+	existingCerts, err := r.listCertificatesForUpdate(tx)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := r.validate(route, existingRoutes, existingCerts, routeOpDelete); err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -649,6 +754,121 @@ func (r *RouteRepo) deleteTx(tx *postgres.DBTx, route *router.Route) error {
 		return err
 	}
 	return r.createEvent(tx, route, ct.EventTypeRouteDeletion)
+}
+
+func (r *RouteRepo) ListCertificates() ([]*router.Certificate, error) {
+	return r.listCertificates(r.db, false)
+}
+
+func (r *RouteRepo) listCertificatesForUpdate(db dbOrTx) ([]*router.Certificate, error) {
+	return r.listCertificates(db, true)
+}
+
+func (r *RouteRepo) listCertificates(db dbOrTx, forUpdate bool) ([]*router.Certificate, error) {
+	query := "certificate_list"
+	if forUpdate {
+		query += "_for_update"
+	}
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var certs []*router.Certificate
+	for rows.Next() {
+		cert, err := scanCertificate(rows)
+		if err != nil {
+			return nil, err
+		}
+		certs = append(certs, cert)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return certs, nil
+}
+
+func scanCertificate(s postgres.Scanner) (*router.Certificate, error) {
+	var (
+		cert   router.Certificate
+		routes string
+	)
+	if err := s.Scan(
+		&cert.ID,
+		&routes,
+		&cert.Cert,
+		&cert.Key,
+		&cert.Ref,
+		&cert.Meta,
+		&cert.CreatedAt,
+		&cert.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	cert.Routes = splitPGStringArray(routes)
+	if cert.Meta == nil {
+		// ensure `{}` rather than `null` when serializing to JSON
+		cert.Meta = map[string]string{}
+	}
+	return &cert, nil
+}
+
+func (r *RouteRepo) GetCertificate(name string) (*router.Certificate, error) {
+	return r.getCert(r.db, name, false)
+}
+
+func (r *RouteRepo) getCert(db dbOrTx, name string, forUpdate bool) (*router.Certificate, error) {
+	query := "certificate_select"
+	if forUpdate {
+		query += "_for_update"
+	}
+	id := strings.TrimPrefix(name, "certificates/")
+	cert, err := scanCertificate(db.QueryRow(query, id))
+	if err == pgx.ErrNoRows {
+		err = ErrNotFound
+	}
+	return cert, err
+}
+
+func (r *RouteRepo) AddCertificate(cert *router.Certificate, force bool) error {
+	if err := r.validateCert(cert, force); err != nil {
+		return err
+	}
+	return r.addCert(r.db, cert)
+}
+
+func (r *RouteRepo) DeleteCertificate(name string) (*router.Certificate, error) {
+	// start a transaction
+	tx, err := r.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+
+	// get the certificate
+	cert, err := r.getCert(tx, name, true)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	// ensure the certificate is not referenced by any routes
+	if len(cert.Routes) > 0 {
+		tx.Rollback()
+		return nil, fmt.Errorf("cannot delete certificate as it is referenced by the following routes: %s", strings.Join(cert.Routes, ", "))
+	}
+
+	// delete the certificate
+	if err := tx.Exec("certificate_delete", cert.ID); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	// commit the transaction
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return cert, nil
 }
 
 func (r *RouteRepo) createEvent(tx *postgres.DBTx, route *router.Route, typ ct.EventType) error {
@@ -716,12 +936,12 @@ const (
 	routeOpDelete routeOp = "delete"
 )
 
-// validate validates the given route against the list of existing routes for
-// the given operation
-func (r *RouteRepo) validate(route *router.Route, existingRoutes []*router.Route, op routeOp) error {
+// validate validates the given route against the list of existing routes and
+// certificates for the given operation
+func (r *RouteRepo) validate(route *router.Route, existingRoutes []*router.Route, existingCerts []*router.Certificate, op routeOp) error {
 	switch route.Type {
 	case "http":
-		return r.validateHTTP(route, existingRoutes, op)
+		return r.validateHTTP(route, existingRoutes, existingCerts, op)
 	case "tcp":
 		return r.validateTCP(route, existingRoutes, op)
 	default:
@@ -730,7 +950,7 @@ func (r *RouteRepo) validate(route *router.Route, existingRoutes []*router.Route
 }
 
 // validateHTTP validates an HTTP route
-func (r *RouteRepo) validateHTTP(route *router.Route, existingRoutes []*router.Route, op routeOp) error {
+func (r *RouteRepo) validateHTTP(route *router.Route, existingRoutes []*router.Route, existingCerts []*router.Certificate, op routeOp) error {
 	if op == routeOpDelete {
 		// If we are removing a default route ensure no dependent routes left
 		if route.Path == "/" {
@@ -816,13 +1036,22 @@ func (r *RouteRepo) validateHTTP(route *router.Route, existingRoutes []*router.R
 	}
 
 	// validate the certificate if set
+	if ref := route.CertificateRef; ref != "" {
+		exists := false
+		for _, c := range existingCerts {
+			if c.Ref == ref {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			return hh.ValidationErr("certificate", fmt.Sprintf("not found: %s", ref))
+		}
+	}
 	cert := route.Certificate
 	if cert != nil && len(cert.Cert) > 0 && len(cert.Key) > 0 {
-		cert.Cert = strings.Trim(cert.Cert, " \n")
-		cert.Key = strings.Trim(cert.Key, " \n")
-
-		if _, err := tls.X509KeyPair([]byte(cert.Cert), []byte(cert.Key)); err != nil {
-			return hh.ValidationErr("certificate", fmt.Sprintf("is invalid: %s", err))
+		if err := r.validateCert(cert, false); err != nil {
+			return err
 		}
 	}
 
@@ -889,6 +1118,26 @@ func (r *RouteRepo) validateTCP(route *router.Route, existingRoutes []*router.Ro
 	return nil
 }
 
+func (r *RouteRepo) validateCert(cert *router.Certificate, force bool) error {
+	// trim any whitespace from the cert and key
+	cert.Cert = strings.Trim(cert.Cert, " \n")
+	cert.Key = strings.Trim(cert.Key, " \n")
+
+	// expect a static certificate
+	v, ok := api.NewCertificate(cert).Certificate.(*api.Certificate_Static)
+	if !ok {
+		return hh.ValidationErr("certificate", "must be a static certificate")
+	}
+	staticCert := v.Static
+
+	// reject certificates with invalid status
+	if staticCert.Status == api.StaticCertificate_STATUS_INVALID {
+		return hh.ValidationErr("certificate", fmt.Sprintf("is invalid: %s", staticCert.StatusDetail))
+	}
+
+	return nil
+}
+
 // normaliseRoutePath normalises a route path by ensuring it ends with a
 // forward slash
 func normaliseRoutePath(path string) string {
@@ -898,12 +1147,26 @@ func normaliseRoutePath(path string) string {
 	return path
 }
 
-// RouteState calculates the state of the given set of routes as the SHA256
-// digest of the canonical JSON representation of a map of route IDs to routes
-func RouteState(routes []*router.Route) []byte {
-	v := make(map[string]*router.Route, len(routes))
+// routeStateData is used to calculate the state of a set of routes and
+// certificates
+type routeStateData struct {
+	Routes       map[string]*router.Route       `json:"routes,omitempty"`
+	Certificates map[string]*router.Certificate `json:"certificates,omitempty"`
+}
+
+// RouteState calculates the state of the given set of routes and certificates
+// as the SHA256 digest of the canonical JSON representation of a map of route
+// IDs to routes and certificate IDs to certificates
+func RouteState(routes []*router.Route, certs []*router.Certificate) []byte {
+	v := routeStateData{
+		Routes:       make(map[string]*router.Route, len(routes)),
+		Certificates: make(map[string]*router.Certificate, len(certs)),
+	}
 	for _, r := range routes {
-		v[r.ID] = r
+		v.Routes[r.ID] = r
+	}
+	for _, c := range certs {
+		v.Certificates[c.ID] = c
 	}
 	data, _ := cjson.Marshal(v)
 	state := sha256.Sum256(data)
@@ -938,8 +1201,14 @@ func routesMatchForUpdate(existing *router.Route, desired *api.Route) bool {
 // configuration as a desired route that has been identified as being an update
 // of the existing route
 func routesEqualForUpdate(existing *router.Route, desired *api.Route) bool {
-	// check HTTP routes for a change in stickiness
+	// check HTTP routes for a change in certificate or stickiness
 	if config, ok := desired.Config.(*api.Route_Http); ok {
+		if config.Http.Tls == nil && existing.CertificateRef != "" {
+			return false
+		}
+		if tls := config.Http.Tls; tls != nil && strings.TrimPrefix(tls.Certificate, "certificates/") != existing.CertificateRef {
+			return false
+		}
 		if existing.Sticky == (config.Http.StickySessions == nil) {
 			return false
 		}
@@ -950,39 +1219,6 @@ func routesEqualForUpdate(existing *router.Route, desired *api.Route) bool {
 		existing.Leader == desired.ServiceTarget.Leader &&
 		existing.DrainBackends == desired.ServiceTarget.DrainBackends &&
 		existing.DisableKeepAlives == desired.DisableKeepAlives
-}
-
-// ToAPIRoute converts a router.Route to an api.Route
-func ToAPIRoute(route *router.Route) *api.Route {
-	r := &api.Route{
-		ServiceTarget: &api.Route_ServiceTarget{
-			ServiceName:   route.Service,
-			Leader:        route.Leader,
-			DrainBackends: route.DrainBackends,
-		},
-		DisableKeepAlives: route.DisableKeepAlives,
-	}
-	if route.ID != "" {
-		r.Name = path.Join(
-			strings.TrimPrefix(route.ParentRef, "controller/"),
-			"routes", route.ID,
-		)
-	}
-	switch route.Type {
-	case "http":
-		r.Config = &api.Route_Http{Http: &api.Route_HTTP{
-			Domain: route.Domain,
-			Path:   route.Path,
-		}}
-		if route.Sticky {
-			r.Config.(*api.Route_Http).Http.StickySessions = &api.Route_HTTP_StickySessions{}
-		}
-	case "tcp":
-		r.Config = &api.Route_Tcp{Tcp: &api.Route_TCP{
-			Port: &api.Route_TCPPort{Port: uint32(route.Port)},
-		}}
-	}
-	return r
 }
 
 // ToRouterRoute converts an api.Route into a router.Route
@@ -1002,6 +1238,9 @@ func ToRouterRoute(appID string, route *api.Route) *router.Route {
 		r.Domain = config.Http.Domain
 		r.Path = config.Http.Path
 		r.Sticky = config.Http.StickySessions != nil
+		if tls := config.Http.Tls; tls != nil && tls.Certificate != "" {
+			r.CertificateRef = strings.TrimPrefix(tls.Certificate, "certificates/")
+		}
 	case *api.Route_Tcp:
 		r.Type = "tcp"
 		r.Port = int32(config.Tcp.Port.Port)

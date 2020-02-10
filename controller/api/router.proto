@@ -4,6 +4,8 @@ package flynn.api.v1;
 
 option go_package = 'api';
 
+import "google/protobuf/timestamp.proto";
+
 // Flynn Router gRPC API v1
 service Router {
   // SetRoutes takes a desired list of routes for a set of apps, calculates the
@@ -19,6 +21,22 @@ service Router {
 
   // ListAppRoutes list routes for a set of apps.
   rpc ListAppRoutes(ListAppRoutesRequest) returns (ListAppRoutesResponse);
+
+  // Lists TLS certificates that can be used by routes.
+  rpc ListCertificates(ListCertificatesRequest) returns (ListCertificatesResponse) {}
+
+  // Gets a specific TLS certificate.
+  rpc GetCertificate(GetCertificateRequest) returns (GetCertificateResponse) {}
+
+  // Creates a TLS certificate. If a certificate with the exact same parameters
+  // already exists, it will be returned instead of creating a duplicate, making
+  // the method idempotent.
+  rpc CreateCertificate(CreateCertificateRequest) returns (CreateCertificateResponse) {}
+
+  // Deletes a TLS certificate. The certificate must not be referenced by any
+  // routes. This method is idempotent and will not return an error if the
+  // specified certificate has already been deleted.
+  rpc DeleteCertificate(DeleteCertificateRequest) returns (DeleteCertificateResponse) {}
 }
 
 // SetRoutesRequest is a request to set a list of app routes.
@@ -61,10 +79,89 @@ message ListAppRoutesRequest {
 message ListAppRoutesResponse {
   // app_routes are the requested routes.
   repeated AppRoutes app_routes = 1;
+}
 
-  // state is the state of the returned routes that can be used as the
-  // expected_state in a subsequent call to SetRoutes.
-  bytes state = 2;
+// A request to list certificates.
+message ListCertificatesRequest {
+}
+
+// A response containing a list of certificates.
+message ListCertificatesResponse {
+  // The certificates.
+  repeated Certificate certificates = 1;
+}
+
+// A request to get a specific certificate.
+message GetCertificateRequest {
+  // Required. The name of the certificate resource to retrieve in the format:
+  // `certificates/{CERTIFICATE_ID}`
+  string name = 1;
+}
+
+// A response containing a specfic certificate.
+message GetCertificateResponse {
+  // The certificate that was requested.
+  Certificate certificate = 1;
+}
+
+// A request to create a new certificate.
+message CreateCertificateRequest {
+  // An existing TLS certificate chain and its corresponding private key.
+  message Static {
+    // Required. A list of DER-encoded X.509 certificates, composing a chain of
+    // exactly one leaf (non-CA/intermediate) certificate followed by zero or
+    // more intermediate CA certificates that may be used to form a valid trust
+    // chain from client platform trusted roots to the leaf. If force is set to
+    // false, a variety of sanity checks are performed, the chain can be out of
+    // order, and it will be checked and rebuilt for client platform
+    // compatibility.
+    repeated bytes chain = 1;
+
+    // Required. The private key corresponding to the public key contained in
+    // the leaf certificate provided in the chain. It must be DER-encoded PKCS#1
+    // (RSA), PKCS#8 (RSA/ECC), or SEC1 (ECC).
+    bytes private_key = 2;
+
+    // By default a variety of checks are performed before creating
+    // a certificate. When force is set to true, the certificate chain will be
+    // accepted as-is with no modification, and without performing additional
+    // checks or rebundling of the chain. When set, the only preconditions are
+    // that the leaf certificate must be the first certificate in the chain and
+    // the private key must match.
+    bool force = 3;
+  }
+
+  // Required. The certificate to create.
+  oneof certificate {
+    // The details of the existing certificate to create.
+    Static static = 1;
+  }
+
+  // A human readable reference for the certificate (e.g. 'my_cert_2019_v1').
+  // The value must be unique amongst all certificates, and will be generated
+  // from the certificate's common name if not set.
+  string ref = 2;
+
+  // Arbitrary metadata, used by API consumers.
+  map<string, string> meta = 3;
+}
+
+// A response containing a certificate that was created.
+message CreateCertificateResponse {
+  // The certificate that was created.
+  Certificate certificate = 1;
+}
+
+// A request to delete a certificate.
+message DeleteCertificateRequest {
+  // Required. The certificate resource name in the format `certificates/{CERTIFICATE_ID}`
+  string name = 1;
+}
+
+// A response containing a certificate that was deleted.
+message DeleteCertificateResponse {
+  // The certificate that was deleted.
+  Certificate certificate = 1;
 }
 
 // RouteConfig is used to define routes in route config files.
@@ -133,6 +230,12 @@ message Route {
     bool drain_backends = 3;
   }
 
+  // The TLS configuration for a route.
+  message TLS {
+    // Required. The certificate to use for TLS handshakes with this route.
+    string certificate = 1;
+  }
+
   message HTTP {
     // Sticky session configuration. Currently there are no configuration options.
     message StickySessions {}
@@ -152,10 +255,13 @@ message Route {
     // target.
     string path = 2;
 
+    // The TLS configuration for the route.
+    TLS tls = 3;
+
     // Enables best-effort session-backend stickiness using an encrypted cookie set
     // and managed by the router that will send requests containing the cookie to
     // the same backend instance. Incompatible with RedirectTarget.
-    StickySessions sticky_sessions = 3;
+    StickySessions sticky_sessions = 4;
   }
 
   message TCP {
@@ -187,9 +293,127 @@ message Route {
   // The protocol-specific configuration.
   oneof config {
     // An HTTP route configuration.
-    HTTP http = 5;
+    HTTP http = 6;
 
     // A TCP route configuration.
-    TCP tcp = 6;
+    TCP tcp = 7;
   }
+}
+
+// A TLS certificate.
+message Certificate {
+  // A certificate key algorithm.
+  enum KeyAlgorithm {
+    // Default value.
+    KEY_ALG_UNSPECIFIED = 0;
+
+    // NIST ECC P-256 curve
+    KEY_ALG_ECC_P256 = 1;
+
+    // 2048-bit RSA
+    KEY_ALG_RSA_2048 = 2;
+
+    // 4096-bit RSA
+    KEY_ALG_RSA_4096 = 3;
+  }
+
+  // The unique identifier of this certificate resource.
+  string name = 1;
+
+  // The routes that reference this certificate.
+  repeated string routes = 2;
+
+  // The timestamp when this resource was created.
+  google.protobuf.Timestamp create_time = 3;
+
+  // Arbitrary metadata, used by API consumers.
+  map<string, string> meta = 4;
+
+  // The certificate.
+  oneof certificate {
+    // A static certificate.
+    StaticCertificate static = 5;
+  }
+}
+
+// An existing TLS certificate. All fields are immutable except status and
+// status_detail, which will change to reflect the current certificate status.
+//
+// If a certificate expires while it is not referenced by any routes, it will be
+// automatically deleted.
+message StaticCertificate {
+  // The status of the certificate.
+  enum Status {
+    // Unused/invalid default value.
+    STATUS_UNSPECIFIED = 0;
+
+    // The certificate is valid.
+    STATUS_VALID = 1;
+
+    // The certificate has expired.
+    STATUS_EXPIRED = 2;
+
+    // The certificate has been revoked.
+    STATUS_REVOKED = 3;
+
+    // The certificate is not valid yet.
+    STATUS_FUTURE_NOT_BEFORE = 4;
+
+    // The chain is invalid due to issues like issuer/subject mismatch,
+    // unsatisfied constraints, and intermediate expiry.
+    STATUS_INVALID = 5;
+  }
+
+  // A list of DER-encoded X.509v3 certificates, composing a chain of exactly
+  // one leaf (non-CA/intermediate) certificate followed by zero or more
+  // intermediate CA certificates that may be used to form a valid trust chain
+  // from client platform trusted roots to the leaf.
+  repeated bytes chain = 1;
+
+  // The unique DNS names included in the leaf certificate Subject
+  // Alternative Names.
+  repeated string domains = 2;
+
+  // The status of the certificate chain. This reflects revocation and
+  // validation errors in the chain, it does not indicate compatiblity with any
+  // client or platform.
+  Status status = 3;
+
+  // A human-readable status description, only set when the status is not VALID.
+  string status_detail = 4;
+
+  // The subject of the leaf certificate.
+  string subject = 5;
+
+  // The issuer organization of the leaf certificate.
+  string issuer = 6;
+
+  // The key algorithm used in the leaf certificate.
+  Certificate.KeyAlgorithm key_algorithm = 7;
+
+  // The notBefore timestamp from the leaf certificate, indicating the start of
+  // the validity period.
+  google.protobuf.Timestamp not_before = 8;
+
+  // The notBefore timestamp from the leaf certificate, when the leaf
+  // certificate expires.
+  google.protobuf.Timestamp not_after = 9;
+
+  // When true, a TLS Feature extension is included which specifies that an OCSP
+  // staple must be included in all TLS handshakes with this certificate.
+  bool ocsp_must_staple = 10;
+
+  // The SHA-256 hash of the DER-encoded leaf certificate. Multiple certificate
+  // resources may have the same fingerprint if they have a different chain.
+  bytes leaf_fingerprint = 11;
+
+  // The SHA-256 hash of the DER-encoded leaf certificate Subject Public Key
+  // Information. Multiple certificate resources will have the same fingerprint
+  // if they share the same keypair.
+  bytes spki_fingerprint = 12;
+
+  // An opaque 32-byte fingerprint that uniquely identifies the certificate
+  // chain. This is used internally for duplicate detection, and will be the
+  // same if a certificate is deleted and recreated with the exact same chain.
+  bytes chain_fingerprint = 13;
 }

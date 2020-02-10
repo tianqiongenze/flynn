@@ -159,7 +159,8 @@
     "hosts": ["{{ getenv \"CLUSTER_DOMAIN\" }}", "*.{{ getenv \"CLUSTER_DOMAIN\" }}"],
     "ca_cert": "{{ getenv \"TLS_CA\" }}",
     "cert": "{{ getenv \"TLS_CERT\" }}",
-    "key": "{{ getenv \"TLS_KEY\" }}"
+    "key": "{{ getenv \"TLS_KEY\" }}",
+    "ref": "flynn_default_certificate"
   },
   {
     "id": "controller",

@@ -1,7 +1,15 @@
 package api
 
 import (
+	"bytes"
 	context "context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/asn1"
 	fmt "fmt"
 	"os"
 	"path"
@@ -14,6 +22,7 @@ import (
 	host "github.com/flynn/flynn/host/types"
 	hh "github.com/flynn/flynn/pkg/httphelper"
 	"github.com/flynn/flynn/pkg/version"
+	router "github.com/flynn/flynn/router/types"
 	"github.com/golang/protobuf/ptypes"
 	durpb "github.com/golang/protobuf/ptypes/duration"
 	tspb "github.com/golang/protobuf/ptypes/timestamp"
@@ -743,4 +752,169 @@ func NewJobState(from ct.JobState) DeploymentEvent_JobState {
 		return DeploymentEvent_FAILED
 	}
 	return DeploymentEvent_PENDING
+}
+
+func NewRoute(from *router.Route) *Route {
+	r := &Route{
+		ServiceTarget: &Route_ServiceTarget{
+			ServiceName:   from.Service,
+			Leader:        from.Leader,
+			DrainBackends: from.DrainBackends,
+		},
+		DisableKeepAlives: from.DisableKeepAlives,
+	}
+	if from.ID != "" {
+		r.Name = path.Join(
+			strings.TrimPrefix(from.ParentRef, "controller/"),
+			"routes", from.ID,
+		)
+	}
+	switch from.Type {
+	case "http":
+		r.Config = &Route_Http{Http: &Route_HTTP{
+			Domain: from.Domain,
+			Path:   from.Path,
+		}}
+		if ref := from.CertificateRef; ref != "" {
+			r.Config.(*Route_Http).Http.Tls = &Route_TLS{
+				Certificate: "certificates/" + ref,
+			}
+		}
+		if from.Sticky {
+			r.Config.(*Route_Http).Http.StickySessions = &Route_HTTP_StickySessions{}
+		}
+	case "tcp":
+		r.Config = &Route_Tcp{Tcp: &Route_TCP{
+			Port: &Route_TCPPort{Port: uint32(from.Port)},
+		}}
+	}
+	return r
+}
+
+func NewCertificate(from *router.Certificate) *Certificate {
+	cert := &Certificate{
+		Routes:     from.Routes, // TODO: these should be 'apps/{APP_ID}/routes/{ROUTE_ID}'
+		CreateTime: NewTimestamp(&from.CreatedAt),
+		Meta:       from.Meta,
+		Certificate: &Certificate_Static{
+			Static: newStaticCertificate(from),
+		},
+	}
+	if from.Ref != "" {
+		cert.Name = path.Join("certificates", from.Ref)
+	}
+	return cert
+}
+
+var (
+	tlsFeatureExtensionOID = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 1, 24}
+	ocspMustStapleValue    = []byte{0x30, 0x03, 0x02, 0x01, 0x05}
+)
+
+func newStaticCertificate(from *router.Certificate) (cert *StaticCertificate) {
+	cert = &StaticCertificate{
+		Status: StaticCertificate_STATUS_VALID,
+	}
+
+	// load the TLS certificate and key
+	tlsCert, err := tls.X509KeyPair([]byte(from.Cert), []byte(from.Key))
+	if err != nil {
+		cert.Status = StaticCertificate_STATUS_INVALID
+		cert.StatusDetail = err.Error()
+		return
+	}
+	cert.Chain = tlsCert.Certificate
+
+	// load the leaf certificate
+	if len(tlsCert.Certificate) == 0 {
+		cert.Status = StaticCertificate_STATUS_INVALID
+		cert.StatusDetail = "missing leaf certificate"
+		return
+	}
+	leafCert, err := x509.ParseCertificate(tlsCert.Certificate[0])
+	if err != nil {
+		cert.Status = StaticCertificate_STATUS_INVALID
+		cert.StatusDetail = err.Error()
+		return
+	}
+
+	// set the Domains from SAN values, falling back to the Common Name
+	// from the Subject
+	cert.Domains = leafCert.DNSNames
+	if len(cert.Domains) == 0 {
+		if commonName := leafCert.Subject.CommonName; commonName != "" {
+			cert.Domains = append(cert.Domains, commonName)
+		}
+	}
+
+	// set Issuer and validity times
+	cert.Issuer = leafCert.Issuer.String()
+	cert.NotBefore = NewTimestamp(&leafCert.NotBefore)
+	cert.NotAfter = NewTimestamp(&leafCert.NotAfter)
+
+	// check for expired or not yet valid status
+	if leafCert.NotAfter.Before(time.Now()) {
+		cert.Status = StaticCertificate_STATUS_EXPIRED
+		cert.StatusDetail = fmt.Sprintf("certificate expired on %s", leafCert.NotAfter)
+	} else if leafCert.NotBefore.After(time.Now()) {
+		cert.Status = StaticCertificate_STATUS_FUTURE_NOT_BEFORE
+		cert.StatusDetail = fmt.Sprintf("certificate is not valid until %s", leafCert.NotBefore)
+	}
+
+	// check if OCSP Must-Staple is set
+	for _, ext := range leafCert.Extensions {
+		if ext.Id.Equal(tlsFeatureExtensionOID) && bytes.Equal(ext.Value, ocspMustStapleValue) {
+			cert.OcspMustStaple = true
+			break
+		}
+	}
+
+	// generate fingerprints
+	fingerprint := func(data []byte) []byte {
+		s := sha256.Sum256(data)
+		return s[:]
+	}
+	cert.LeafFingerprint = fingerprint(leafCert.RawTBSCertificate)
+	cert.SpkiFingerprint = fingerprint(leafCert.RawSubjectPublicKeyInfo)
+	cert.ChainFingerprint = fingerprint(bytes.Join(tlsCert.Certificate, []byte{}))
+
+	// determine the key's algorithm
+	switch leafCert.PublicKeyAlgorithm {
+	case x509.RSA:
+		rsaKey, ok := leafCert.PublicKey.(*rsa.PublicKey)
+		if !ok {
+			cert.Status = StaticCertificate_STATUS_INVALID
+			cert.StatusDetail = fmt.Sprintf("invalid public key: expected RSA, got %T", leafCert.PublicKey)
+			return
+		}
+		size := rsaKey.N.BitLen()
+		switch size {
+		case 2048:
+			cert.KeyAlgorithm = Certificate_KEY_ALG_RSA_2048
+		case 4096:
+			cert.KeyAlgorithm = Certificate_KEY_ALG_RSA_4096
+		default:
+			cert.Status = StaticCertificate_STATUS_INVALID
+			cert.StatusDetail = fmt.Sprintf("invalid RSA key size: %d", size)
+		}
+	case x509.ECDSA:
+		ecKey, ok := leafCert.PublicKey.(*ecdsa.PublicKey)
+		if !ok {
+			cert.Status = StaticCertificate_STATUS_INVALID
+			cert.StatusDetail = fmt.Sprintf("invalid public key: expected ECDSA, got %T", leafCert.PublicKey)
+			return
+		}
+		switch ecKey.Curve {
+		case elliptic.P256():
+			cert.KeyAlgorithm = Certificate_KEY_ALG_ECC_P256
+		default:
+			cert.Status = StaticCertificate_STATUS_INVALID
+			cert.StatusDetail = fmt.Sprintf("invalid ECDSA curve: %v", ecKey.Curve)
+		}
+	default:
+		cert.Status = StaticCertificate_STATUS_INVALID
+		cert.StatusDetail = fmt.Sprintf("unsupported key algorithm: %v", leafCert.PublicKeyAlgorithm)
+	}
+
+	return
 }

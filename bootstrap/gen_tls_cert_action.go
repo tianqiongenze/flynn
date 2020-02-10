@@ -15,6 +15,7 @@ type GenTLSCertAction struct {
 	CACert     string `json:"ca_cert"`
 	Cert       string `json:"cert"`
 	PrivateKey string `json:"key"`
+	Ref        string `json:"ref"`
 }
 
 func init() {
@@ -32,6 +33,7 @@ func (a *GenTLSCertAction) Run(s *State) (err error) {
 		data.CACert = a.CACert
 		data.Cert = a.Cert
 		data.PrivateKey = a.PrivateKey
+		data.Ref = a.Ref
 
 		// calculate cert pin
 		b, _ := pem.Decode([]byte(data.Cert))
@@ -51,6 +53,8 @@ func (a *GenTLSCertAction) Run(s *State) (err error) {
 	data.Cert = c.Cert
 	data.Pin = c.Pin
 	data.PrivateKey = c.PrivateKey
+	data.Ref = a.Ref
+	data.Meta = map[string]string{"flynn.ephemeral_ca": "true"}
 
 	return err
 }

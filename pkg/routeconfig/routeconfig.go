@@ -122,6 +122,9 @@ def routes(ctx):
 	path = "{{ .Path }}",
 	{{- end }}
 	target = service("{{ .Service }}"{{ if .Leader }}, leader = True{{ end }}{{ if not .DrainBackends }}, drain_backends = False{{ end }}),
+	{{- if .CertificateRef }}
+	certificate = "certificates/{{ .CertificateRef }}",
+	{{- end }}
 	{{- if .Sticky }}
 	sticky = True,
 	{{- end }}
@@ -165,7 +168,7 @@ def app_routes(v):
 
   return appRoutes
 
-def http_route(domain, target, path = "/", sticky = False, disable_keep_alives = False):
+def http_route(domain, target, path = "/", certificate = "", sticky = False, disable_keep_alives = False):
   route = apiv1.Route(
     http = apiv1.Route.HTTP(
       domain = domain,
@@ -174,6 +177,11 @@ def http_route(domain, target, path = "/", sticky = False, disable_keep_alives =
     service_target = target,
     disable_keep_alives = disable_keep_alives,
   )
+
+  if certificate != "":
+    route.http.tls = apiv1.Route.TLS(
+      certificate = certificate,
+    )
 
   if sticky:
     route.http.sticky_sessions = apiv1.Route.HTTP.StickySessions()

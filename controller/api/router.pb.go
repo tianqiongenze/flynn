@@ -7,6 +7,7 @@ import (
 	context "context"
 	fmt "fmt"
 	proto "github.com/golang/protobuf/proto"
+	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -48,7 +49,7 @@ func (x RouteConfig_Version) String() string {
 }
 
 func (RouteConfig_Version) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_367072455c71aedc, []int{4, 0}
+	return fileDescriptor_367072455c71aedc, []int{12, 0}
 }
 
 type RouteChange_Action int32
@@ -83,7 +84,88 @@ func (x RouteChange_Action) String() string {
 }
 
 func (RouteChange_Action) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_367072455c71aedc, []int{6, 0}
+	return fileDescriptor_367072455c71aedc, []int{14, 0}
+}
+
+// A certificate key algorithm.
+type Certificate_KeyAlgorithm int32
+
+const (
+	// Default value.
+	Certificate_KEY_ALG_UNSPECIFIED Certificate_KeyAlgorithm = 0
+	// NIST ECC P-256 curve
+	Certificate_KEY_ALG_ECC_P256 Certificate_KeyAlgorithm = 1
+	// 2048-bit RSA
+	Certificate_KEY_ALG_RSA_2048 Certificate_KeyAlgorithm = 2
+	// 4096-bit RSA
+	Certificate_KEY_ALG_RSA_4096 Certificate_KeyAlgorithm = 3
+)
+
+var Certificate_KeyAlgorithm_name = map[int32]string{
+	0: "KEY_ALG_UNSPECIFIED",
+	1: "KEY_ALG_ECC_P256",
+	2: "KEY_ALG_RSA_2048",
+	3: "KEY_ALG_RSA_4096",
+}
+
+var Certificate_KeyAlgorithm_value = map[string]int32{
+	"KEY_ALG_UNSPECIFIED": 0,
+	"KEY_ALG_ECC_P256":    1,
+	"KEY_ALG_RSA_2048":    2,
+	"KEY_ALG_RSA_4096":    3,
+}
+
+func (x Certificate_KeyAlgorithm) String() string {
+	return proto.EnumName(Certificate_KeyAlgorithm_name, int32(x))
+}
+
+func (Certificate_KeyAlgorithm) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{16, 0}
+}
+
+// The status of the certificate.
+type StaticCertificate_Status int32
+
+const (
+	// Unused/invalid default value.
+	StaticCertificate_STATUS_UNSPECIFIED StaticCertificate_Status = 0
+	// The certificate is valid.
+	StaticCertificate_STATUS_VALID StaticCertificate_Status = 1
+	// The certificate has expired.
+	StaticCertificate_STATUS_EXPIRED StaticCertificate_Status = 2
+	// The certificate has been revoked.
+	StaticCertificate_STATUS_REVOKED StaticCertificate_Status = 3
+	// The certificate is not valid yet.
+	StaticCertificate_STATUS_FUTURE_NOT_BEFORE StaticCertificate_Status = 4
+	// The chain is invalid due to issues like issuer/subject mismatch,
+	// unsatisfied constraints, and intermediate expiry.
+	StaticCertificate_STATUS_INVALID StaticCertificate_Status = 5
+)
+
+var StaticCertificate_Status_name = map[int32]string{
+	0: "STATUS_UNSPECIFIED",
+	1: "STATUS_VALID",
+	2: "STATUS_EXPIRED",
+	3: "STATUS_REVOKED",
+	4: "STATUS_FUTURE_NOT_BEFORE",
+	5: "STATUS_INVALID",
+}
+
+var StaticCertificate_Status_value = map[string]int32{
+	"STATUS_UNSPECIFIED":       0,
+	"STATUS_VALID":             1,
+	"STATUS_EXPIRED":           2,
+	"STATUS_REVOKED":           3,
+	"STATUS_FUTURE_NOT_BEFORE": 4,
+	"STATUS_INVALID":           5,
+}
+
+func (x StaticCertificate_Status) String() string {
+	return proto.EnumName(StaticCertificate_Status_name, int32(x))
+}
+
+func (StaticCertificate_Status) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{17, 0}
 }
 
 // SetRoutesRequest is a request to set a list of app routes.
@@ -254,13 +336,10 @@ func (m *ListAppRoutesRequest) GetApps() []string {
 // ListAppRoutesResponse is a response to list routes for a set of apps.
 type ListAppRoutesResponse struct {
 	// app_routes are the requested routes.
-	AppRoutes []*AppRoutes `protobuf:"bytes,1,rep,name=app_routes,json=appRoutes,proto3" json:"app_routes,omitempty"`
-	// state is the state of the returned routes that can be used as the
-	// expected_state in a subsequent call to SetRoutes.
-	State                []byte   `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	AppRoutes            []*AppRoutes `protobuf:"bytes,1,rep,name=app_routes,json=appRoutes,proto3" json:"app_routes,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_unrecognized     []byte       `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
 }
 
 func (m *ListAppRoutesResponse) Reset()         { *m = ListAppRoutesResponse{} }
@@ -295,9 +374,430 @@ func (m *ListAppRoutesResponse) GetAppRoutes() []*AppRoutes {
 	return nil
 }
 
-func (m *ListAppRoutesResponse) GetState() []byte {
+// A request to list certificates.
+type ListCertificatesRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ListCertificatesRequest) Reset()         { *m = ListCertificatesRequest{} }
+func (m *ListCertificatesRequest) String() string { return proto.CompactTextString(m) }
+func (*ListCertificatesRequest) ProtoMessage()    {}
+func (*ListCertificatesRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{4}
+}
+
+func (m *ListCertificatesRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ListCertificatesRequest.Unmarshal(m, b)
+}
+func (m *ListCertificatesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ListCertificatesRequest.Marshal(b, m, deterministic)
+}
+func (m *ListCertificatesRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ListCertificatesRequest.Merge(m, src)
+}
+func (m *ListCertificatesRequest) XXX_Size() int {
+	return xxx_messageInfo_ListCertificatesRequest.Size(m)
+}
+func (m *ListCertificatesRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ListCertificatesRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ListCertificatesRequest proto.InternalMessageInfo
+
+// A response containing a list of certificates.
+type ListCertificatesResponse struct {
+	// The certificates.
+	Certificates         []*Certificate `protobuf:"bytes,1,rep,name=certificates,proto3" json:"certificates,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_unrecognized     []byte         `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
+}
+
+func (m *ListCertificatesResponse) Reset()         { *m = ListCertificatesResponse{} }
+func (m *ListCertificatesResponse) String() string { return proto.CompactTextString(m) }
+func (*ListCertificatesResponse) ProtoMessage()    {}
+func (*ListCertificatesResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{5}
+}
+
+func (m *ListCertificatesResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ListCertificatesResponse.Unmarshal(m, b)
+}
+func (m *ListCertificatesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ListCertificatesResponse.Marshal(b, m, deterministic)
+}
+func (m *ListCertificatesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ListCertificatesResponse.Merge(m, src)
+}
+func (m *ListCertificatesResponse) XXX_Size() int {
+	return xxx_messageInfo_ListCertificatesResponse.Size(m)
+}
+func (m *ListCertificatesResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ListCertificatesResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ListCertificatesResponse proto.InternalMessageInfo
+
+func (m *ListCertificatesResponse) GetCertificates() []*Certificate {
 	if m != nil {
-		return m.State
+		return m.Certificates
+	}
+	return nil
+}
+
+// A request to get a specific certificate.
+type GetCertificateRequest struct {
+	// Required. The name of the certificate resource to retrieve in the format:
+	// `certificates/{CERTIFICATE_ID}`
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetCertificateRequest) Reset()         { *m = GetCertificateRequest{} }
+func (m *GetCertificateRequest) String() string { return proto.CompactTextString(m) }
+func (*GetCertificateRequest) ProtoMessage()    {}
+func (*GetCertificateRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{6}
+}
+
+func (m *GetCertificateRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetCertificateRequest.Unmarshal(m, b)
+}
+func (m *GetCertificateRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetCertificateRequest.Marshal(b, m, deterministic)
+}
+func (m *GetCertificateRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetCertificateRequest.Merge(m, src)
+}
+func (m *GetCertificateRequest) XXX_Size() int {
+	return xxx_messageInfo_GetCertificateRequest.Size(m)
+}
+func (m *GetCertificateRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetCertificateRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetCertificateRequest proto.InternalMessageInfo
+
+func (m *GetCertificateRequest) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+// A response containing a specfic certificate.
+type GetCertificateResponse struct {
+	// The certificate that was requested.
+	Certificate          *Certificate `protobuf:"bytes,1,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_unrecognized     []byte       `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
+}
+
+func (m *GetCertificateResponse) Reset()         { *m = GetCertificateResponse{} }
+func (m *GetCertificateResponse) String() string { return proto.CompactTextString(m) }
+func (*GetCertificateResponse) ProtoMessage()    {}
+func (*GetCertificateResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{7}
+}
+
+func (m *GetCertificateResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetCertificateResponse.Unmarshal(m, b)
+}
+func (m *GetCertificateResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetCertificateResponse.Marshal(b, m, deterministic)
+}
+func (m *GetCertificateResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetCertificateResponse.Merge(m, src)
+}
+func (m *GetCertificateResponse) XXX_Size() int {
+	return xxx_messageInfo_GetCertificateResponse.Size(m)
+}
+func (m *GetCertificateResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetCertificateResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetCertificateResponse proto.InternalMessageInfo
+
+func (m *GetCertificateResponse) GetCertificate() *Certificate {
+	if m != nil {
+		return m.Certificate
+	}
+	return nil
+}
+
+// A request to create a new certificate.
+type CreateCertificateRequest struct {
+	// Required. The certificate to create.
+	//
+	// Types that are valid to be assigned to Certificate:
+	//	*CreateCertificateRequest_Static_
+	Certificate isCreateCertificateRequest_Certificate `protobuf_oneof:"certificate"`
+	// Arbitrary metadata, used by API consumers.
+	Meta                 map[string]string `protobuf:"bytes,2,rep,name=meta,proto3" json:"meta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
+}
+
+func (m *CreateCertificateRequest) Reset()         { *m = CreateCertificateRequest{} }
+func (m *CreateCertificateRequest) String() string { return proto.CompactTextString(m) }
+func (*CreateCertificateRequest) ProtoMessage()    {}
+func (*CreateCertificateRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{8}
+}
+
+func (m *CreateCertificateRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CreateCertificateRequest.Unmarshal(m, b)
+}
+func (m *CreateCertificateRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CreateCertificateRequest.Marshal(b, m, deterministic)
+}
+func (m *CreateCertificateRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CreateCertificateRequest.Merge(m, src)
+}
+func (m *CreateCertificateRequest) XXX_Size() int {
+	return xxx_messageInfo_CreateCertificateRequest.Size(m)
+}
+func (m *CreateCertificateRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_CreateCertificateRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CreateCertificateRequest proto.InternalMessageInfo
+
+type isCreateCertificateRequest_Certificate interface {
+	isCreateCertificateRequest_Certificate()
+}
+
+type CreateCertificateRequest_Static_ struct {
+	Static *CreateCertificateRequest_Static `protobuf:"bytes,1,opt,name=static,proto3,oneof"`
+}
+
+func (*CreateCertificateRequest_Static_) isCreateCertificateRequest_Certificate() {}
+
+func (m *CreateCertificateRequest) GetCertificate() isCreateCertificateRequest_Certificate {
+	if m != nil {
+		return m.Certificate
+	}
+	return nil
+}
+
+func (m *CreateCertificateRequest) GetStatic() *CreateCertificateRequest_Static {
+	if x, ok := m.GetCertificate().(*CreateCertificateRequest_Static_); ok {
+		return x.Static
+	}
+	return nil
+}
+
+func (m *CreateCertificateRequest) GetMeta() map[string]string {
+	if m != nil {
+		return m.Meta
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*CreateCertificateRequest) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*CreateCertificateRequest_Static_)(nil),
+	}
+}
+
+// An existing TLS certificate chain and its corresponding private key.
+type CreateCertificateRequest_Static struct {
+	// Required. A list of DER-encoded X.509 certificates, composing a chain of
+	// exactly one leaf (non-CA/intermediate) certificate followed by zero or
+	// more intermediate CA certificates that may be used to form a valid trust
+	// chain from client platform trusted roots to the leaf. If force is set to
+	// false, a variety of sanity checks are performed, the chain can be out of
+	// order, and it will be checked and rebuilt for client platform
+	// compatibility.
+	Chain [][]byte `protobuf:"bytes,1,rep,name=chain,proto3" json:"chain,omitempty"`
+	// Required. The private key corresponding to the public key contained in
+	// the leaf certificate provided in the chain. It must be DER-encoded PKCS#1
+	// (RSA), PKCS#8 (RSA/ECC), or SEC1 (ECC).
+	PrivateKey []byte `protobuf:"bytes,2,opt,name=private_key,json=privateKey,proto3" json:"private_key,omitempty"`
+	// By default a variety of checks are performed before creating
+	// a certificate. When force is set to true, the certificate chain will be
+	// accepted as-is with no modification, and without performing additional
+	// checks or rebundling of the chain. When set, the only preconditions are
+	// that the leaf certificate must be the first certificate in the chain and
+	// the private key must match.
+	Force                bool     `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *CreateCertificateRequest_Static) Reset()         { *m = CreateCertificateRequest_Static{} }
+func (m *CreateCertificateRequest_Static) String() string { return proto.CompactTextString(m) }
+func (*CreateCertificateRequest_Static) ProtoMessage()    {}
+func (*CreateCertificateRequest_Static) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{8, 0}
+}
+
+func (m *CreateCertificateRequest_Static) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CreateCertificateRequest_Static.Unmarshal(m, b)
+}
+func (m *CreateCertificateRequest_Static) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CreateCertificateRequest_Static.Marshal(b, m, deterministic)
+}
+func (m *CreateCertificateRequest_Static) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CreateCertificateRequest_Static.Merge(m, src)
+}
+func (m *CreateCertificateRequest_Static) XXX_Size() int {
+	return xxx_messageInfo_CreateCertificateRequest_Static.Size(m)
+}
+func (m *CreateCertificateRequest_Static) XXX_DiscardUnknown() {
+	xxx_messageInfo_CreateCertificateRequest_Static.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CreateCertificateRequest_Static proto.InternalMessageInfo
+
+func (m *CreateCertificateRequest_Static) GetChain() [][]byte {
+	if m != nil {
+		return m.Chain
+	}
+	return nil
+}
+
+func (m *CreateCertificateRequest_Static) GetPrivateKey() []byte {
+	if m != nil {
+		return m.PrivateKey
+	}
+	return nil
+}
+
+func (m *CreateCertificateRequest_Static) GetForce() bool {
+	if m != nil {
+		return m.Force
+	}
+	return false
+}
+
+// A response containing a certificate that was created.
+type CreateCertificateResponse struct {
+	// The certificate that was created.
+	Certificate          *Certificate `protobuf:"bytes,1,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_unrecognized     []byte       `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
+}
+
+func (m *CreateCertificateResponse) Reset()         { *m = CreateCertificateResponse{} }
+func (m *CreateCertificateResponse) String() string { return proto.CompactTextString(m) }
+func (*CreateCertificateResponse) ProtoMessage()    {}
+func (*CreateCertificateResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{9}
+}
+
+func (m *CreateCertificateResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CreateCertificateResponse.Unmarshal(m, b)
+}
+func (m *CreateCertificateResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CreateCertificateResponse.Marshal(b, m, deterministic)
+}
+func (m *CreateCertificateResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CreateCertificateResponse.Merge(m, src)
+}
+func (m *CreateCertificateResponse) XXX_Size() int {
+	return xxx_messageInfo_CreateCertificateResponse.Size(m)
+}
+func (m *CreateCertificateResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_CreateCertificateResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CreateCertificateResponse proto.InternalMessageInfo
+
+func (m *CreateCertificateResponse) GetCertificate() *Certificate {
+	if m != nil {
+		return m.Certificate
+	}
+	return nil
+}
+
+// A request to delete a certificate.
+type DeleteCertificateRequest struct {
+	// Required. The certificate resource name in the format `certificates/{CERTIFICATE_ID}`
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *DeleteCertificateRequest) Reset()         { *m = DeleteCertificateRequest{} }
+func (m *DeleteCertificateRequest) String() string { return proto.CompactTextString(m) }
+func (*DeleteCertificateRequest) ProtoMessage()    {}
+func (*DeleteCertificateRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{10}
+}
+
+func (m *DeleteCertificateRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_DeleteCertificateRequest.Unmarshal(m, b)
+}
+func (m *DeleteCertificateRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_DeleteCertificateRequest.Marshal(b, m, deterministic)
+}
+func (m *DeleteCertificateRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DeleteCertificateRequest.Merge(m, src)
+}
+func (m *DeleteCertificateRequest) XXX_Size() int {
+	return xxx_messageInfo_DeleteCertificateRequest.Size(m)
+}
+func (m *DeleteCertificateRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_DeleteCertificateRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DeleteCertificateRequest proto.InternalMessageInfo
+
+func (m *DeleteCertificateRequest) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+// A response containing a certificate that was deleted.
+type DeleteCertificateResponse struct {
+	// The certificate that was deleted.
+	Certificate          *Certificate `protobuf:"bytes,1,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_unrecognized     []byte       `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
+}
+
+func (m *DeleteCertificateResponse) Reset()         { *m = DeleteCertificateResponse{} }
+func (m *DeleteCertificateResponse) String() string { return proto.CompactTextString(m) }
+func (*DeleteCertificateResponse) ProtoMessage()    {}
+func (*DeleteCertificateResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{11}
+}
+
+func (m *DeleteCertificateResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_DeleteCertificateResponse.Unmarshal(m, b)
+}
+func (m *DeleteCertificateResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_DeleteCertificateResponse.Marshal(b, m, deterministic)
+}
+func (m *DeleteCertificateResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DeleteCertificateResponse.Merge(m, src)
+}
+func (m *DeleteCertificateResponse) XXX_Size() int {
+	return xxx_messageInfo_DeleteCertificateResponse.Size(m)
+}
+func (m *DeleteCertificateResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_DeleteCertificateResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DeleteCertificateResponse proto.InternalMessageInfo
+
+func (m *DeleteCertificateResponse) GetCertificate() *Certificate {
+	if m != nil {
+		return m.Certificate
 	}
 	return nil
 }
@@ -317,7 +817,7 @@ func (m *RouteConfig) Reset()         { *m = RouteConfig{} }
 func (m *RouteConfig) String() string { return proto.CompactTextString(m) }
 func (*RouteConfig) ProtoMessage()    {}
 func (*RouteConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_367072455c71aedc, []int{4}
+	return fileDescriptor_367072455c71aedc, []int{12}
 }
 
 func (m *RouteConfig) XXX_Unmarshal(b []byte) error {
@@ -367,7 +867,7 @@ func (m *AppRoutes) Reset()         { *m = AppRoutes{} }
 func (m *AppRoutes) String() string { return proto.CompactTextString(m) }
 func (*AppRoutes) ProtoMessage()    {}
 func (*AppRoutes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_367072455c71aedc, []int{5}
+	return fileDescriptor_367072455c71aedc, []int{13}
 }
 
 func (m *AppRoutes) XXX_Unmarshal(b []byte) error {
@@ -419,7 +919,7 @@ func (m *RouteChange) Reset()         { *m = RouteChange{} }
 func (m *RouteChange) String() string { return proto.CompactTextString(m) }
 func (*RouteChange) ProtoMessage()    {}
 func (*RouteChange) Descriptor() ([]byte, []int) {
-	return fileDescriptor_367072455c71aedc, []int{6}
+	return fileDescriptor_367072455c71aedc, []int{14}
 }
 
 func (m *RouteChange) XXX_Unmarshal(b []byte) error {
@@ -488,7 +988,7 @@ func (m *Route) Reset()         { *m = Route{} }
 func (m *Route) String() string { return proto.CompactTextString(m) }
 func (*Route) ProtoMessage()    {}
 func (*Route) Descriptor() ([]byte, []int) {
-	return fileDescriptor_367072455c71aedc, []int{7}
+	return fileDescriptor_367072455c71aedc, []int{15}
 }
 
 func (m *Route) XXX_Unmarshal(b []byte) error {
@@ -542,11 +1042,11 @@ type isRoute_Config interface {
 }
 
 type Route_Http struct {
-	Http *Route_HTTP `protobuf:"bytes,5,opt,name=http,proto3,oneof"`
+	Http *Route_HTTP `protobuf:"bytes,6,opt,name=http,proto3,oneof"`
 }
 
 type Route_Tcp struct {
-	Tcp *Route_TCP `protobuf:"bytes,6,opt,name=tcp,proto3,oneof"`
+	Tcp *Route_TCP `protobuf:"bytes,7,opt,name=tcp,proto3,oneof"`
 }
 
 func (*Route_Http) isRoute_Config() {}
@@ -599,7 +1099,7 @@ func (m *Route_ServiceTarget) Reset()         { *m = Route_ServiceTarget{} }
 func (m *Route_ServiceTarget) String() string { return proto.CompactTextString(m) }
 func (*Route_ServiceTarget) ProtoMessage()    {}
 func (*Route_ServiceTarget) Descriptor() ([]byte, []int) {
-	return fileDescriptor_367072455c71aedc, []int{7, 0}
+	return fileDescriptor_367072455c71aedc, []int{15, 0}
 }
 
 func (m *Route_ServiceTarget) XXX_Unmarshal(b []byte) error {
@@ -641,6 +1141,47 @@ func (m *Route_ServiceTarget) GetDrainBackends() bool {
 	return false
 }
 
+// The TLS configuration for a route.
+type Route_TLS struct {
+	// Required. The certificate to use for TLS handshakes with this route.
+	Certificate          string   `protobuf:"bytes,1,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *Route_TLS) Reset()         { *m = Route_TLS{} }
+func (m *Route_TLS) String() string { return proto.CompactTextString(m) }
+func (*Route_TLS) ProtoMessage()    {}
+func (*Route_TLS) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{15, 1}
+}
+
+func (m *Route_TLS) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_Route_TLS.Unmarshal(m, b)
+}
+func (m *Route_TLS) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_Route_TLS.Marshal(b, m, deterministic)
+}
+func (m *Route_TLS) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Route_TLS.Merge(m, src)
+}
+func (m *Route_TLS) XXX_Size() int {
+	return xxx_messageInfo_Route_TLS.Size(m)
+}
+func (m *Route_TLS) XXX_DiscardUnknown() {
+	xxx_messageInfo_Route_TLS.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Route_TLS proto.InternalMessageInfo
+
+func (m *Route_TLS) GetCertificate() string {
+	if m != nil {
+		return m.Certificate
+	}
+	return ""
+}
+
 type Route_HTTP struct {
 	// Required. The name of the server that this route matches. May contain up
 	// to 10 wildcard labels for plaintext HTTP routes or a single wildcard
@@ -655,10 +1196,12 @@ type Route_HTTP struct {
 	// segments are matched. The full unstripped path is sent in requests to the
 	// target.
 	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// The TLS configuration for the route.
+	Tls *Route_TLS `protobuf:"bytes,3,opt,name=tls,proto3" json:"tls,omitempty"`
 	// Enables best-effort session-backend stickiness using an encrypted cookie set
 	// and managed by the router that will send requests containing the cookie to
 	// the same backend instance. Incompatible with RedirectTarget.
-	StickySessions       *Route_HTTP_StickySessions `protobuf:"bytes,3,opt,name=sticky_sessions,json=stickySessions,proto3" json:"sticky_sessions,omitempty"`
+	StickySessions       *Route_HTTP_StickySessions `protobuf:"bytes,4,opt,name=sticky_sessions,json=stickySessions,proto3" json:"sticky_sessions,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                   `json:"-"`
 	XXX_unrecognized     []byte                     `json:"-"`
 	XXX_sizecache        int32                      `json:"-"`
@@ -668,7 +1211,7 @@ func (m *Route_HTTP) Reset()         { *m = Route_HTTP{} }
 func (m *Route_HTTP) String() string { return proto.CompactTextString(m) }
 func (*Route_HTTP) ProtoMessage()    {}
 func (*Route_HTTP) Descriptor() ([]byte, []int) {
-	return fileDescriptor_367072455c71aedc, []int{7, 1}
+	return fileDescriptor_367072455c71aedc, []int{15, 2}
 }
 
 func (m *Route_HTTP) XXX_Unmarshal(b []byte) error {
@@ -703,6 +1246,13 @@ func (m *Route_HTTP) GetPath() string {
 	return ""
 }
 
+func (m *Route_HTTP) GetTls() *Route_TLS {
+	if m != nil {
+		return m.Tls
+	}
+	return nil
+}
+
 func (m *Route_HTTP) GetStickySessions() *Route_HTTP_StickySessions {
 	if m != nil {
 		return m.StickySessions
@@ -721,7 +1271,7 @@ func (m *Route_HTTP_StickySessions) Reset()         { *m = Route_HTTP_StickySess
 func (m *Route_HTTP_StickySessions) String() string { return proto.CompactTextString(m) }
 func (*Route_HTTP_StickySessions) ProtoMessage()    {}
 func (*Route_HTTP_StickySessions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_367072455c71aedc, []int{7, 1, 0}
+	return fileDescriptor_367072455c71aedc, []int{15, 2, 0}
 }
 
 func (m *Route_HTTP_StickySessions) XXX_Unmarshal(b []byte) error {
@@ -755,7 +1305,7 @@ func (m *Route_TCP) Reset()         { *m = Route_TCP{} }
 func (m *Route_TCP) String() string { return proto.CompactTextString(m) }
 func (*Route_TCP) ProtoMessage()    {}
 func (*Route_TCP) Descriptor() ([]byte, []int) {
-	return fileDescriptor_367072455c71aedc, []int{7, 2}
+	return fileDescriptor_367072455c71aedc, []int{15, 3}
 }
 
 func (m *Route_TCP) XXX_Unmarshal(b []byte) error {
@@ -796,7 +1346,7 @@ func (m *Route_TCPPort) Reset()         { *m = Route_TCPPort{} }
 func (m *Route_TCPPort) String() string { return proto.CompactTextString(m) }
 func (*Route_TCPPort) ProtoMessage()    {}
 func (*Route_TCPPort) Descriptor() ([]byte, []int) {
-	return fileDescriptor_367072455c71aedc, []int{7, 3}
+	return fileDescriptor_367072455c71aedc, []int{15, 4}
 }
 
 func (m *Route_TCPPort) XXX_Unmarshal(b []byte) error {
@@ -824,78 +1374,413 @@ func (m *Route_TCPPort) GetPort() uint32 {
 	return 0
 }
 
+// A TLS certificate.
+type Certificate struct {
+	// The unique identifier of this certificate resource.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The routes that reference this certificate.
+	Routes []string `protobuf:"bytes,2,rep,name=routes,proto3" json:"routes,omitempty"`
+	// The timestamp when this resource was created.
+	CreateTime *timestamp.Timestamp `protobuf:"bytes,3,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// Arbitrary metadata, used by API consumers.
+	Meta map[string]string `protobuf:"bytes,4,rep,name=meta,proto3" json:"meta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	// The certificate.
+	//
+	// Types that are valid to be assigned to Certificate:
+	//	*Certificate_Static
+	Certificate          isCertificate_Certificate `protobuf_oneof:"certificate"`
+	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
+	XXX_unrecognized     []byte                    `json:"-"`
+	XXX_sizecache        int32                     `json:"-"`
+}
+
+func (m *Certificate) Reset()         { *m = Certificate{} }
+func (m *Certificate) String() string { return proto.CompactTextString(m) }
+func (*Certificate) ProtoMessage()    {}
+func (*Certificate) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{16}
+}
+
+func (m *Certificate) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_Certificate.Unmarshal(m, b)
+}
+func (m *Certificate) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_Certificate.Marshal(b, m, deterministic)
+}
+func (m *Certificate) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Certificate.Merge(m, src)
+}
+func (m *Certificate) XXX_Size() int {
+	return xxx_messageInfo_Certificate.Size(m)
+}
+func (m *Certificate) XXX_DiscardUnknown() {
+	xxx_messageInfo_Certificate.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Certificate proto.InternalMessageInfo
+
+func (m *Certificate) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *Certificate) GetRoutes() []string {
+	if m != nil {
+		return m.Routes
+	}
+	return nil
+}
+
+func (m *Certificate) GetCreateTime() *timestamp.Timestamp {
+	if m != nil {
+		return m.CreateTime
+	}
+	return nil
+}
+
+func (m *Certificate) GetMeta() map[string]string {
+	if m != nil {
+		return m.Meta
+	}
+	return nil
+}
+
+type isCertificate_Certificate interface {
+	isCertificate_Certificate()
+}
+
+type Certificate_Static struct {
+	Static *StaticCertificate `protobuf:"bytes,5,opt,name=static,proto3,oneof"`
+}
+
+func (*Certificate_Static) isCertificate_Certificate() {}
+
+func (m *Certificate) GetCertificate() isCertificate_Certificate {
+	if m != nil {
+		return m.Certificate
+	}
+	return nil
+}
+
+func (m *Certificate) GetStatic() *StaticCertificate {
+	if x, ok := m.GetCertificate().(*Certificate_Static); ok {
+		return x.Static
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*Certificate) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*Certificate_Static)(nil),
+	}
+}
+
+// An existing TLS certificate. All fields are immutable except status and
+// status_detail, which will change to reflect the current certificate status.
+//
+// If a certificate expires while it is not referenced by any routes, it will be
+// automatically deleted.
+type StaticCertificate struct {
+	// A list of DER-encoded X.509v3 certificates, composing a chain of exactly
+	// one leaf (non-CA/intermediate) certificate followed by zero or more
+	// intermediate CA certificates that may be used to form a valid trust chain
+	// from client platform trusted roots to the leaf.
+	Chain [][]byte `protobuf:"bytes,1,rep,name=chain,proto3" json:"chain,omitempty"`
+	// The unique DNS names included in the leaf certificate Subject
+	// Alternative Names.
+	Domains []string `protobuf:"bytes,2,rep,name=domains,proto3" json:"domains,omitempty"`
+	// The status of the certificate chain. This reflects revocation and
+	// validation errors in the chain, it does not indicate compatiblity with any
+	// client or platform.
+	Status StaticCertificate_Status `protobuf:"varint,3,opt,name=status,proto3,enum=flynn.api.v1.StaticCertificate_Status" json:"status,omitempty"`
+	// A human-readable status description, only set when the status is not VALID.
+	StatusDetail string `protobuf:"bytes,4,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
+	// The subject of the leaf certificate.
+	Subject string `protobuf:"bytes,5,opt,name=subject,proto3" json:"subject,omitempty"`
+	// The issuer organization of the leaf certificate.
+	Issuer string `protobuf:"bytes,6,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	// The key algorithm used in the leaf certificate.
+	KeyAlgorithm Certificate_KeyAlgorithm `protobuf:"varint,7,opt,name=key_algorithm,json=keyAlgorithm,proto3,enum=flynn.api.v1.Certificate_KeyAlgorithm" json:"key_algorithm,omitempty"`
+	// The notBefore timestamp from the leaf certificate, indicating the start of
+	// the validity period.
+	NotBefore *timestamp.Timestamp `protobuf:"bytes,8,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
+	// The notBefore timestamp from the leaf certificate, when the leaf
+	// certificate expires.
+	NotAfter *timestamp.Timestamp `protobuf:"bytes,9,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
+	// When true, a TLS Feature extension is included which specifies that an OCSP
+	// staple must be included in all TLS handshakes with this certificate.
+	OcspMustStaple bool `protobuf:"varint,10,opt,name=ocsp_must_staple,json=ocspMustStaple,proto3" json:"ocsp_must_staple,omitempty"`
+	// The SHA-256 hash of the DER-encoded leaf certificate. Multiple certificate
+	// resources may have the same fingerprint if they have a different chain.
+	LeafFingerprint []byte `protobuf:"bytes,11,opt,name=leaf_fingerprint,json=leafFingerprint,proto3" json:"leaf_fingerprint,omitempty"`
+	// The SHA-256 hash of the DER-encoded leaf certificate Subject Public Key
+	// Information. Multiple certificate resources will have the same fingerprint
+	// if they share the same keypair.
+	SpkiFingerprint []byte `protobuf:"bytes,12,opt,name=spki_fingerprint,json=spkiFingerprint,proto3" json:"spki_fingerprint,omitempty"`
+	// An opaque 32-byte fingerprint that uniquely identifies the certificate
+	// chain. This is used internally for duplicate detection, and will be the
+	// same if a certificate is deleted and recreated with the exact same chain.
+	ChainFingerprint     []byte   `protobuf:"bytes,13,opt,name=chain_fingerprint,json=chainFingerprint,proto3" json:"chain_fingerprint,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *StaticCertificate) Reset()         { *m = StaticCertificate{} }
+func (m *StaticCertificate) String() string { return proto.CompactTextString(m) }
+func (*StaticCertificate) ProtoMessage()    {}
+func (*StaticCertificate) Descriptor() ([]byte, []int) {
+	return fileDescriptor_367072455c71aedc, []int{17}
+}
+
+func (m *StaticCertificate) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_StaticCertificate.Unmarshal(m, b)
+}
+func (m *StaticCertificate) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_StaticCertificate.Marshal(b, m, deterministic)
+}
+func (m *StaticCertificate) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StaticCertificate.Merge(m, src)
+}
+func (m *StaticCertificate) XXX_Size() int {
+	return xxx_messageInfo_StaticCertificate.Size(m)
+}
+func (m *StaticCertificate) XXX_DiscardUnknown() {
+	xxx_messageInfo_StaticCertificate.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StaticCertificate proto.InternalMessageInfo
+
+func (m *StaticCertificate) GetChain() [][]byte {
+	if m != nil {
+		return m.Chain
+	}
+	return nil
+}
+
+func (m *StaticCertificate) GetDomains() []string {
+	if m != nil {
+		return m.Domains
+	}
+	return nil
+}
+
+func (m *StaticCertificate) GetStatus() StaticCertificate_Status {
+	if m != nil {
+		return m.Status
+	}
+	return StaticCertificate_STATUS_UNSPECIFIED
+}
+
+func (m *StaticCertificate) GetStatusDetail() string {
+	if m != nil {
+		return m.StatusDetail
+	}
+	return ""
+}
+
+func (m *StaticCertificate) GetSubject() string {
+	if m != nil {
+		return m.Subject
+	}
+	return ""
+}
+
+func (m *StaticCertificate) GetIssuer() string {
+	if m != nil {
+		return m.Issuer
+	}
+	return ""
+}
+
+func (m *StaticCertificate) GetKeyAlgorithm() Certificate_KeyAlgorithm {
+	if m != nil {
+		return m.KeyAlgorithm
+	}
+	return Certificate_KEY_ALG_UNSPECIFIED
+}
+
+func (m *StaticCertificate) GetNotBefore() *timestamp.Timestamp {
+	if m != nil {
+		return m.NotBefore
+	}
+	return nil
+}
+
+func (m *StaticCertificate) GetNotAfter() *timestamp.Timestamp {
+	if m != nil {
+		return m.NotAfter
+	}
+	return nil
+}
+
+func (m *StaticCertificate) GetOcspMustStaple() bool {
+	if m != nil {
+		return m.OcspMustStaple
+	}
+	return false
+}
+
+func (m *StaticCertificate) GetLeafFingerprint() []byte {
+	if m != nil {
+		return m.LeafFingerprint
+	}
+	return nil
+}
+
+func (m *StaticCertificate) GetSpkiFingerprint() []byte {
+	if m != nil {
+		return m.SpkiFingerprint
+	}
+	return nil
+}
+
+func (m *StaticCertificate) GetChainFingerprint() []byte {
+	if m != nil {
+		return m.ChainFingerprint
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterEnum("flynn.api.v1.RouteConfig_Version", RouteConfig_Version_name, RouteConfig_Version_value)
 	proto.RegisterEnum("flynn.api.v1.RouteChange_Action", RouteChange_Action_name, RouteChange_Action_value)
+	proto.RegisterEnum("flynn.api.v1.Certificate_KeyAlgorithm", Certificate_KeyAlgorithm_name, Certificate_KeyAlgorithm_value)
+	proto.RegisterEnum("flynn.api.v1.StaticCertificate_Status", StaticCertificate_Status_name, StaticCertificate_Status_value)
 	proto.RegisterType((*SetRoutesRequest)(nil), "flynn.api.v1.SetRoutesRequest")
 	proto.RegisterType((*SetRoutesResponse)(nil), "flynn.api.v1.SetRoutesResponse")
 	proto.RegisterType((*ListAppRoutesRequest)(nil), "flynn.api.v1.ListAppRoutesRequest")
 	proto.RegisterType((*ListAppRoutesResponse)(nil), "flynn.api.v1.ListAppRoutesResponse")
+	proto.RegisterType((*ListCertificatesRequest)(nil), "flynn.api.v1.ListCertificatesRequest")
+	proto.RegisterType((*ListCertificatesResponse)(nil), "flynn.api.v1.ListCertificatesResponse")
+	proto.RegisterType((*GetCertificateRequest)(nil), "flynn.api.v1.GetCertificateRequest")
+	proto.RegisterType((*GetCertificateResponse)(nil), "flynn.api.v1.GetCertificateResponse")
+	proto.RegisterType((*CreateCertificateRequest)(nil), "flynn.api.v1.CreateCertificateRequest")
+	proto.RegisterMapType((map[string]string)(nil), "flynn.api.v1.CreateCertificateRequest.MetaEntry")
+	proto.RegisterType((*CreateCertificateRequest_Static)(nil), "flynn.api.v1.CreateCertificateRequest.Static")
+	proto.RegisterType((*CreateCertificateResponse)(nil), "flynn.api.v1.CreateCertificateResponse")
+	proto.RegisterType((*DeleteCertificateRequest)(nil), "flynn.api.v1.DeleteCertificateRequest")
+	proto.RegisterType((*DeleteCertificateResponse)(nil), "flynn.api.v1.DeleteCertificateResponse")
 	proto.RegisterType((*RouteConfig)(nil), "flynn.api.v1.RouteConfig")
 	proto.RegisterType((*AppRoutes)(nil), "flynn.api.v1.AppRoutes")
 	proto.RegisterType((*RouteChange)(nil), "flynn.api.v1.RouteChange")
 	proto.RegisterType((*Route)(nil), "flynn.api.v1.Route")
 	proto.RegisterType((*Route_ServiceTarget)(nil), "flynn.api.v1.Route.ServiceTarget")
+	proto.RegisterType((*Route_TLS)(nil), "flynn.api.v1.Route.TLS")
 	proto.RegisterType((*Route_HTTP)(nil), "flynn.api.v1.Route.HTTP")
 	proto.RegisterType((*Route_HTTP_StickySessions)(nil), "flynn.api.v1.Route.HTTP.StickySessions")
 	proto.RegisterType((*Route_TCP)(nil), "flynn.api.v1.Route.TCP")
 	proto.RegisterType((*Route_TCPPort)(nil), "flynn.api.v1.Route.TCPPort")
+	proto.RegisterType((*Certificate)(nil), "flynn.api.v1.Certificate")
+	proto.RegisterMapType((map[string]string)(nil), "flynn.api.v1.Certificate.MetaEntry")
+	proto.RegisterType((*StaticCertificate)(nil), "flynn.api.v1.StaticCertificate")
 }
 
 func init() { proto.RegisterFile("router.proto", fileDescriptor_367072455c71aedc) }
 
 var fileDescriptor_367072455c71aedc = []byte{
-	// 799 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x55, 0xd1, 0x6e, 0xe3, 0x44,
-	0x14, 0x5d, 0x37, 0x89, 0xdb, 0xdc, 0xc6, 0xc1, 0x9d, 0x2e, 0x1b, 0x13, 0x04, 0x64, 0x8d, 0x10,
-	0x81, 0x95, 0x8c, 0x1a, 0xa4, 0x15, 0x12, 0x12, 0x52, 0x9a, 0x1a, 0xb5, 0x50, 0x95, 0x68, 0xe2,
-	0x5d, 0x01, 0x2f, 0xd6, 0xc4, 0x9e, 0xb4, 0x56, 0xb3, 0xf6, 0xec, 0xcc, 0x24, 0x22, 0xbf, 0xc0,
-	0x07, 0xec, 0x77, 0xf0, 0xc2, 0xb7, 0x21, 0xf1, 0x84, 0x3c, 0x33, 0xc9, 0xc6, 0x25, 0x59, 0x21,
-	0xde, 0xe6, 0x9e, 0x39, 0x77, 0xee, 0xb9, 0x67, 0xc6, 0xd7, 0xd0, 0xe2, 0xc5, 0x42, 0x52, 0x1e,
-	0x30, 0x5e, 0xc8, 0x02, 0xb5, 0x66, 0xf3, 0x55, 0x9e, 0x07, 0x84, 0x65, 0xc1, 0xf2, 0xcc, 0xff,
-	0xdd, 0x02, 0x77, 0x42, 0x25, 0x2e, 0x19, 0x02, 0xd3, 0xd7, 0x0b, 0x2a, 0x24, 0x7a, 0x0e, 0x40,
-	0x18, 0x8b, 0x55, 0x9a, 0xf0, 0xac, 0x5e, 0xad, 0x7f, 0x3c, 0xe8, 0x04, 0xdb, 0x79, 0xc1, 0x90,
-	0x31, 0x93, 0xd3, 0x24, 0xeb, 0x25, 0xea, 0xc0, 0x61, 0xca, 0x57, 0x31, 0x5f, 0xe4, 0xde, 0x41,
-	0xcf, 0xea, 0x1f, 0x61, 0x3b, 0xe5, 0x2b, 0xbc, 0xc8, 0xd1, 0x67, 0xd0, 0xa6, 0xbf, 0x31, 0x9a,
-	0x48, 0x9a, 0xc6, 0x42, 0x12, 0x49, 0xbd, 0x5a, 0xcf, 0xea, 0xb7, 0xb0, 0xb3, 0x46, 0x27, 0x25,
-	0xe8, 0xbf, 0xb1, 0xe0, 0x64, 0x4b, 0x8c, 0x60, 0x45, 0x2e, 0x28, 0xfa, 0x0e, 0x1c, 0xa5, 0x24,
-	0x4e, 0xee, 0x48, 0x7e, 0xbb, 0x11, 0xf4, 0x41, 0x55, 0x90, 0x4a, 0x1a, 0x29, 0x06, 0xd6, 0x0d,
-	0xeb, 0xe0, 0x1d, 0xaa, 0xfa, 0xe0, 0x12, 0xc6, 0xe6, 0x19, 0x4d, 0x63, 0x59, 0x54, 0x74, 0xb5,
-	0x0d, 0x1e, 0x15, 0x5a, 0xd8, 0x97, 0xf0, 0xf8, 0x3a, 0x13, 0xf2, 0x6d, 0xd3, 0xc6, 0x28, 0x04,
-	0x75, 0xc2, 0x98, 0x56, 0xd4, 0xc4, 0x6a, 0xed, 0x53, 0x78, 0xff, 0x01, 0xd7, 0xf4, 0xf1, 0x7f,
-	0x5d, 0x7d, 0x0c, 0x0d, 0xad, 0xed, 0x40, 0x69, 0xd3, 0x81, 0xff, 0xa7, 0x05, 0xc7, 0xba, 0xe7,
-	0x22, 0x9f, 0x65, 0xb7, 0xe8, 0x5b, 0x38, 0x5c, 0x52, 0x2e, 0xb2, 0x22, 0xf7, 0xac, 0x9e, 0xd5,
-	0x6f, 0x0f, 0x9e, 0xee, 0xf2, 0x47, 0x71, 0x83, 0x97, 0x9a, 0x88, 0xd7, 0x19, 0x0f, 0xa4, 0x1d,
-	0xfc, 0x57, 0x69, 0xfe, 0x19, 0x1c, 0x9a, 0xb3, 0x50, 0x07, 0x4e, 0x5f, 0x86, 0x78, 0x72, 0xf5,
-	0xd3, 0x4d, 0xfc, 0xe2, 0x66, 0x32, 0x0e, 0x47, 0x57, 0xdf, 0x5f, 0x85, 0x17, 0xee, 0x23, 0xe4,
-	0x40, 0x73, 0xbd, 0x71, 0xe6, 0x5a, 0xfe, 0x0f, 0xd0, 0xdc, 0x1c, 0x85, 0x5c, 0xa8, 0x11, 0xc6,
-	0x94, 0xe0, 0x26, 0x2e, 0x97, 0xe8, 0x19, 0xd8, 0x15, 0x15, 0xa7, 0x3b, 0xba, 0xc0, 0x86, 0xe2,
-	0xff, 0xbd, 0xf1, 0x40, 0x5d, 0x35, 0xfa, 0x06, 0x6c, 0x92, 0xc8, 0xb7, 0x16, 0xf4, 0xf6, 0x3e,
-	0x91, 0x60, 0xa8, 0x78, 0xd8, 0xf0, 0xcb, 0xb2, 0x53, 0x3a, 0x2b, 0xb8, 0x36, 0x79, 0x5f, 0x59,
-	0x4d, 0x41, 0x5f, 0x40, 0x83, 0xcc, 0x24, 0xe5, 0xea, 0xb1, 0xec, 0xe1, 0x6a, 0x86, 0xff, 0x0b,
-	0xd8, 0xba, 0x12, 0x7a, 0x02, 0x68, 0x38, 0x8a, 0xfe, 0x6d, 0xcf, 0x09, 0x38, 0x06, 0x1f, 0xe1,
-	0x70, 0x18, 0x85, 0xae, 0xb5, 0x05, 0xbd, 0x18, 0x5f, 0x94, 0xd0, 0xc1, 0x16, 0x74, 0x11, 0x5e,
-	0x87, 0x51, 0xe8, 0xd6, 0xfc, 0xbf, 0xea, 0xd0, 0x50, 0xb5, 0xca, 0x57, 0x98, 0x93, 0x57, 0xd4,
-	0xd8, 0xa8, 0xd6, 0xe8, 0x09, 0xd8, 0x8c, 0x70, 0x9a, 0x4b, 0xd5, 0x50, 0x13, 0x9b, 0x08, 0x5d,
-	0x42, 0x5b, 0x50, 0xbe, 0xcc, 0x12, 0x1a, 0x4b, 0xc2, 0x6f, 0xa9, 0x34, 0x4d, 0xec, 0x7a, 0x2d,
-	0xc1, 0x44, 0x33, 0x23, 0x45, 0xc4, 0x8e, 0xd8, 0x0e, 0x51, 0x00, 0xa7, 0x69, 0x26, 0xc8, 0x74,
-	0x4e, 0xe3, 0x7b, 0x4a, 0x59, 0x4c, 0xe6, 0xd9, 0x92, 0x0a, 0xaf, 0xae, 0x3e, 0xb1, 0x13, 0xb3,
-	0xf5, 0x23, 0xa5, 0x6c, 0xa8, 0x36, 0x50, 0x00, 0xf5, 0x3b, 0x29, 0x99, 0xd7, 0x50, 0xf5, 0xbc,
-	0x5d, 0xf5, 0x2e, 0xa3, 0x68, 0x7c, 0xf9, 0x08, 0x2b, 0x1e, 0x7a, 0x06, 0x35, 0x99, 0x30, 0xcf,
-	0x56, 0xf4, 0xce, 0x2e, 0x7a, 0x34, 0x2a, 0xd9, 0x25, 0xab, 0xfb, 0x1a, 0x9c, 0x8a, 0x58, 0xf4,
-	0x14, 0x5a, 0xeb, 0x3e, 0xb7, 0xbc, 0x39, 0x36, 0xd8, 0x8d, 0xb1, 0x68, 0x4e, 0x49, 0x4a, 0xf9,
-	0x7a, 0x2c, 0xe8, 0xa8, 0x1c, 0x56, 0x29, 0x27, 0x59, 0x1e, 0x4f, 0x49, 0x72, 0x4f, 0xf3, 0x54,
-	0x28, 0x8b, 0x8e, 0xb0, 0xa3, 0xd0, 0x73, 0x03, 0x76, 0xdf, 0x58, 0x50, 0x2f, 0x05, 0x97, 0xe7,
-	0xa4, 0xc5, 0x2b, 0x92, 0xe5, 0xa6, 0x88, 0x89, 0xca, 0x6b, 0x61, 0x44, 0xde, 0x99, 0x0b, 0x50,
-	0x6b, 0x34, 0x86, 0xf7, 0x84, 0xcc, 0x92, 0xfb, 0x55, 0x2c, 0xa8, 0x28, 0xbf, 0x1b, 0x61, 0xfc,
-	0xff, 0x7c, 0x9f, 0x1f, 0xc1, 0x44, 0xf1, 0x27, 0x86, 0x8e, 0xdb, 0xa2, 0x12, 0x77, 0x5d, 0x68,
-	0x57, 0x19, 0xdd, 0xe7, 0x50, 0x8b, 0x46, 0x63, 0xf4, 0x15, 0xd4, 0x59, 0xc1, 0xa5, 0x12, 0x75,
-	0x3c, 0xf8, 0x70, 0x8f, 0x81, 0xe3, 0x82, 0x4b, 0xac, 0x88, 0xdd, 0x8f, 0xe0, 0xd0, 0x00, 0x4a,
-	0xfa, 0x3a, 0xd7, 0xd1, 0xdb, 0xe7, 0x47, 0x60, 0x27, 0x6a, 0x7c, 0x0c, 0xfe, 0xb0, 0xc0, 0x56,
-	0x07, 0x70, 0x74, 0x0d, 0xcd, 0xcd, 0xc0, 0x46, 0x1f, 0x57, 0x6b, 0x3c, 0xfc, 0xad, 0x74, 0x3f,
-	0xd9, 0xbb, 0x6f, 0x26, 0xe4, 0xcf, 0xe0, 0x54, 0x46, 0x27, 0xf2, 0xab, 0x19, 0xbb, 0x66, 0x70,
-	0xf7, 0xd3, 0x77, 0x72, 0xf4, 0xc9, 0xe7, 0x8d, 0x5f, 0x6b, 0x84, 0x65, 0x53, 0x5b, 0xfd, 0x02,
-	0xbf, 0xfe, 0x27, 0x00, 0x00, 0xff, 0xff, 0x4e, 0x1c, 0xb6, 0xd8, 0x12, 0x07, 0x00, 0x00,
+	// 1564 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x57, 0xeb, 0x4e, 0x1b, 0xc1,
+	0x15, 0xc6, 0x57, 0xf0, 0xf1, 0x25, 0xcb, 0xe4, 0xc2, 0xe2, 0x5e, 0x20, 0x9b, 0x26, 0x21, 0x45,
+	0xdd, 0x24, 0x34, 0x25, 0x49, 0xa3, 0x46, 0x32, 0xf6, 0x12, 0x28, 0x04, 0xac, 0xb1, 0x41, 0xa4,
+	0x52, 0xb5, 0x1a, 0xd6, 0x63, 0xd8, 0x62, 0x76, 0x37, 0xbb, 0x63, 0x54, 0xbf, 0x42, 0xd5, 0xdf,
+	0xfd, 0xd7, 0xc7, 0xe8, 0x03, 0x54, 0xea, 0x8f, 0x4a, 0x7d, 0x80, 0xbe, 0x4b, 0x7f, 0x55, 0x73,
+	0x59, 0x58, 0xdb, 0x6b, 0x88, 0xa2, 0xfc, 0x9b, 0xf9, 0xe6, 0x3b, 0x97, 0x39, 0xe7, 0xcc, 0x99,
+	0x19, 0xa8, 0x84, 0xfe, 0x90, 0xd1, 0xd0, 0x0c, 0x42, 0x9f, 0xf9, 0xa8, 0xd2, 0x1f, 0x8c, 0x3c,
+	0xcf, 0x24, 0x81, 0x6b, 0x5e, 0xbd, 0xae, 0xaf, 0x9c, 0xf9, 0xfe, 0xd9, 0x80, 0xbe, 0x14, 0x6b,
+	0xa7, 0xc3, 0xfe, 0x4b, 0xe6, 0x5e, 0xd2, 0x88, 0x91, 0xcb, 0x40, 0xd2, 0x8d, 0xbf, 0x64, 0x40,
+	0xeb, 0x50, 0x86, 0xb9, 0x8a, 0x08, 0xd3, 0xaf, 0x43, 0x1a, 0x31, 0xb4, 0x09, 0x40, 0x82, 0xc0,
+	0x16, 0x7a, 0x23, 0x3d, 0xb3, 0x9a, 0x5b, 0x2b, 0x6f, 0x2c, 0x99, 0x49, 0xc5, 0x66, 0x23, 0x08,
+	0x94, 0x4c, 0x89, 0xc4, 0x43, 0xb4, 0x04, 0xf3, 0xbd, 0x70, 0x64, 0x87, 0x43, 0x4f, 0xcf, 0xae,
+	0x66, 0xd6, 0x16, 0x70, 0xb1, 0x17, 0x8e, 0xf0, 0xd0, 0x43, 0x4f, 0xa1, 0x46, 0xff, 0x1c, 0x50,
+	0x87, 0xd1, 0x9e, 0x1d, 0x31, 0xc2, 0xa8, 0x9e, 0x5b, 0xcd, 0xac, 0x55, 0x70, 0x35, 0x46, 0x3b,
+	0x1c, 0x34, 0xfe, 0x96, 0x81, 0xc5, 0x84, 0x33, 0x51, 0xe0, 0x7b, 0x11, 0x45, 0x1f, 0xa1, 0x2a,
+	0x3c, 0xb1, 0x9d, 0x73, 0xe2, 0x9d, 0x5d, 0x3b, 0xb4, 0x3c, 0xee, 0x90, 0x10, 0x6a, 0x0a, 0x06,
+	0x96, 0x11, 0x91, 0x93, 0x5b, 0xbc, 0x5a, 0x03, 0x8d, 0x04, 0xc1, 0xc0, 0xa5, 0x3d, 0x9b, 0xf9,
+	0x63, 0x7e, 0xd5, 0x14, 0xde, 0xf5, 0xa5, 0x63, 0xbf, 0x84, 0x07, 0xfb, 0x6e, 0xc4, 0x6e, 0x36,
+	0xad, 0x02, 0x85, 0x20, 0x4f, 0x82, 0x40, 0x7a, 0x54, 0xc2, 0x62, 0x6c, 0x1c, 0xc2, 0xc3, 0x09,
+	0xae, 0xda, 0xc7, 0x77, 0x46, 0xd5, 0x58, 0x86, 0x25, 0xae, 0xb0, 0x49, 0x43, 0xe6, 0xf6, 0x5d,
+	0x87, 0xdc, 0xd8, 0x37, 0xbe, 0x80, 0x3e, 0xbd, 0xa4, 0xcc, 0xfd, 0x0e, 0x2a, 0x4e, 0x02, 0x4f,
+	0x8f, 0x5a, 0x42, 0x12, 0x8f, 0xd1, 0x8d, 0x75, 0x78, 0xf8, 0x89, 0x26, 0x35, 0x27, 0xf6, 0xec,
+	0x91, 0x4b, 0xaa, 0x67, 0x56, 0x33, 0x7c, 0xcf, 0x7c, 0x6c, 0x1c, 0xc1, 0xa3, 0x49, 0xb2, 0xf2,
+	0xe2, 0x03, 0x94, 0x13, 0x6a, 0x85, 0xd0, 0xad, 0x4e, 0x24, 0xd9, 0xc6, 0xbf, 0xb3, 0xa0, 0x37,
+	0x43, 0x4a, 0x18, 0x4d, 0xf1, 0xe3, 0x13, 0x14, 0x79, 0xca, 0x5c, 0x47, 0x29, 0xfd, 0xd5, 0x84,
+	0xd2, 0x19, 0x72, 0x66, 0x47, 0x08, 0xed, 0xcc, 0x61, 0x25, 0x8e, 0x5a, 0x90, 0xbf, 0xa4, 0x8c,
+	0xe8, 0x59, 0x11, 0xa0, 0x57, 0xdf, 0xa8, 0xe6, 0x33, 0x65, 0xc4, 0xf2, 0x58, 0x38, 0xc2, 0x42,
+	0xba, 0x7e, 0x04, 0x45, 0xa9, 0x19, 0x3d, 0x80, 0x82, 0x73, 0x4e, 0x5c, 0x4f, 0x44, 0xbc, 0x82,
+	0xe5, 0x04, 0xad, 0x40, 0x39, 0x08, 0xdd, 0x2b, 0xc2, 0xa8, 0x7d, 0x41, 0x47, 0xa2, 0x12, 0x2b,
+	0x18, 0x14, 0xb4, 0x47, 0x47, 0x5c, 0xac, 0xef, 0x87, 0x8e, 0x2c, 0xc1, 0x05, 0x2c, 0x27, 0xf5,
+	0xb7, 0x50, 0xba, 0xb6, 0x84, 0x34, 0xc8, 0x71, 0x59, 0x19, 0x79, 0x3e, 0xe4, 0x42, 0x57, 0x64,
+	0x30, 0xa4, 0x42, 0x5f, 0x09, 0xcb, 0xc9, 0x6f, 0xb3, 0xef, 0x32, 0x5b, 0xd5, 0xb1, 0xc0, 0x1b,
+	0x27, 0xb0, 0x9c, 0xb2, 0x95, 0x1f, 0x91, 0x24, 0x13, 0xf4, 0x16, 0x1d, 0xd0, 0xd4, 0x1c, 0xa5,
+	0xd5, 0xca, 0x09, 0x2c, 0xa7, 0xf0, 0x7f, 0x84, 0x27, 0xff, 0xc8, 0x40, 0x59, 0xb6, 0x01, 0xdf,
+	0xeb, 0xbb, 0x67, 0xe8, 0x03, 0xcc, 0x5f, 0xd1, 0x30, 0x72, 0x7d, 0x4f, 0x28, 0xaa, 0x6d, 0x3c,
+	0x4e, 0x6b, 0x19, 0x82, 0x6b, 0x1e, 0x4b, 0x22, 0x8e, 0x25, 0x26, 0x4e, 0x6b, 0xf6, 0x9b, 0x4f,
+	0xeb, 0x6b, 0x98, 0x57, 0xba, 0xd0, 0x12, 0xdc, 0x3f, 0xb6, 0x70, 0x67, 0xf7, 0xf0, 0xc0, 0x3e,
+	0x3a, 0xe8, 0xb4, 0xad, 0xe6, 0xee, 0xf6, 0xae, 0xd5, 0xd2, 0xe6, 0x50, 0x15, 0x4a, 0xf1, 0xc2,
+	0x6b, 0x2d, 0x63, 0xfc, 0x1e, 0x4a, 0xd7, 0xaa, 0x78, 0x8e, 0x49, 0x10, 0xc4, 0x39, 0x26, 0x41,
+	0x80, 0xd6, 0xa1, 0x38, 0xe6, 0xc5, 0xfd, 0x94, 0x5d, 0x60, 0x45, 0x31, 0xfe, 0x77, 0x1d, 0x03,
+	0xd1, 0xfd, 0xd0, 0x3b, 0x28, 0x12, 0x87, 0xdd, 0x84, 0x60, 0x75, 0x66, 0xd7, 0x34, 0x1b, 0x82,
+	0x87, 0x15, 0x9f, 0x9b, 0x3d, 0xa5, 0x7d, 0x3f, 0x94, 0xb5, 0x35, 0xcb, 0xac, 0xa4, 0xa0, 0x17,
+	0x50, 0x20, 0x7d, 0x46, 0x43, 0x51, 0xbc, 0x33, 0xb8, 0x92, 0x61, 0x7c, 0x81, 0xa2, 0xb4, 0x84,
+	0x1e, 0x01, 0x6a, 0x34, 0xbb, 0xd3, 0xe1, 0x59, 0x84, 0xaa, 0xc2, 0x9b, 0xd8, 0x6a, 0x74, 0x2d,
+	0x2d, 0x93, 0x80, 0x8e, 0xda, 0x2d, 0x0e, 0x65, 0x13, 0x50, 0xcb, 0xda, 0xb7, 0xba, 0x96, 0x96,
+	0x33, 0xfe, 0x53, 0x80, 0x82, 0xb0, 0x95, 0x56, 0x78, 0xe8, 0x11, 0x14, 0x03, 0x12, 0x52, 0x8f,
+	0xa9, 0xc3, 0xa2, 0x66, 0x68, 0x07, 0x6a, 0x11, 0x0d, 0xaf, 0x5c, 0x87, 0xda, 0x8c, 0x84, 0x67,
+	0x94, 0xa9, 0x4d, 0xa4, 0x55, 0x8b, 0xd9, 0x91, 0xcc, 0xae, 0x20, 0xe2, 0x6a, 0x94, 0x9c, 0x22,
+	0x13, 0xee, 0xf7, 0xdc, 0x88, 0x9c, 0x0e, 0xf8, 0x19, 0xa7, 0x81, 0x4d, 0x06, 0xee, 0x15, 0x8d,
+	0xf4, 0xbc, 0x38, 0xd0, 0x8b, 0x6a, 0x69, 0x8f, 0xd2, 0xa0, 0x21, 0x16, 0x90, 0x09, 0xf9, 0x73,
+	0xc6, 0x02, 0xbd, 0x28, 0xec, 0xe9, 0x69, 0xf6, 0x76, 0xba, 0xdd, 0xf6, 0xce, 0x1c, 0x16, 0x3c,
+	0xb4, 0x0e, 0x39, 0xe6, 0x04, 0xfa, 0xbc, 0xa0, 0x2f, 0xa5, 0xd1, 0xbb, 0x4d, 0xce, 0xe6, 0xac,
+	0xfa, 0x57, 0xa8, 0x8e, 0x39, 0x8b, 0x1e, 0x43, 0x25, 0xde, 0x67, 0x22, 0x36, 0x65, 0x85, 0x1d,
+	0xa8, 0x10, 0x0d, 0x28, 0xe9, 0xd1, 0x30, 0xbe, 0x29, 0xe5, 0x8c, 0xdf, 0xdf, 0xbd, 0x90, 0xb8,
+	0x9e, 0x7d, 0x4a, 0x9c, 0x0b, 0xea, 0xf5, 0x22, 0xd5, 0xa4, 0xaa, 0x02, 0xdd, 0x52, 0x60, 0xfd,
+	0x39, 0xe4, 0xba, 0xfb, 0x1d, 0xb4, 0x3a, 0x7d, 0x88, 0x4b, 0x63, 0x27, 0xb5, 0xfe, 0xcf, 0x0c,
+	0xe4, 0xf9, 0xce, 0xb8, 0xc1, 0x9e, 0x7f, 0x29, 0x9b, 0xa5, 0xc8, 0x89, 0x9c, 0xf1, 0xfc, 0x05,
+	0x84, 0x9d, 0xab, 0x4c, 0x89, 0x31, 0x7a, 0x01, 0x39, 0x36, 0x88, 0x54, 0x72, 0xd2, 0x77, 0xbf,
+	0xdf, 0xc1, 0x9c, 0x83, 0xda, 0x70, 0x2f, 0x62, 0xae, 0x73, 0x31, 0xb2, 0x23, 0x1a, 0xf1, 0xb3,
+	0x28, 0x93, 0x50, 0xde, 0x78, 0x3e, 0x2b, 0xc6, 0x66, 0x47, 0xf0, 0x3b, 0x8a, 0x8e, 0x6b, 0xd1,
+	0xd8, 0xbc, 0xae, 0x41, 0x6d, 0x9c, 0x51, 0xdf, 0x84, 0x5c, 0xb7, 0xd9, 0x46, 0x2f, 0x21, 0x1f,
+	0xf8, 0x21, 0x53, 0xad, 0xea, 0x27, 0x33, 0x92, 0xd2, 0xf6, 0x43, 0x86, 0x05, 0xb1, 0xfe, 0x33,
+	0x98, 0x57, 0x80, 0xd8, 0x65, 0x2c, 0x5b, 0x95, 0xcb, 0x5b, 0x0b, 0x50, 0x74, 0x44, 0x4b, 0x32,
+	0xfe, 0x9e, 0x83, 0x72, 0xa2, 0xd7, 0xcd, 0xaa, 0xe9, 0x44, 0x6f, 0x28, 0xc5, 0x6d, 0x40, 0xf4,
+	0x51, 0xd1, 0xee, 0x6d, 0xfe, 0xe0, 0x53, 0x31, 0xab, 0x9b, 0xf2, 0x35, 0x68, 0xc6, 0xaf, 0x41,
+	0xb3, 0x1b, 0xbf, 0x06, 0x31, 0x48, 0x3a, 0x07, 0xd0, 0x5b, 0x75, 0x21, 0xe6, 0x45, 0xbb, 0x79,
+	0x32, 0xb3, 0xfb, 0x4e, 0xde, 0x81, 0xe8, 0xfd, 0xf5, 0x95, 0x5c, 0x10, 0x06, 0x57, 0xc6, 0x45,
+	0xe5, 0xfd, 0x98, 0x50, 0x70, 0x73, 0x09, 0x7f, 0xf7, 0x3d, 0x67, 0xb8, 0x50, 0xd9, 0xa3, 0xa3,
+	0xc6, 0xe0, 0xcc, 0x0f, 0x5d, 0x76, 0x7e, 0xc9, 0x9b, 0xee, 0x9e, 0xf5, 0xc5, 0x6e, 0xec, 0x7f,
+	0x9a, 0xe8, 0x2a, 0x0f, 0x40, 0x8b, 0x17, 0xac, 0x66, 0xd3, 0x6e, 0x6f, 0xfc, 0x66, 0x53, 0xcb,
+	0x24, 0x51, 0xdc, 0x69, 0xd8, 0x1b, 0xaf, 0xde, 0xbc, 0xd3, 0xb2, 0x93, 0xe8, 0x9b, 0x57, 0xef,
+	0x37, 0xb5, 0xdc, 0xe4, 0x95, 0xfa, 0xdf, 0x02, 0x2c, 0x4e, 0x6d, 0x69, 0xc6, 0xed, 0xaf, 0xc3,
+	0xbc, 0xac, 0xec, 0x38, 0x51, 0xf1, 0x14, 0x7d, 0x94, 0x31, 0x1b, 0xca, 0xc2, 0xae, 0x6d, 0x3c,
+	0xbb, 0x23, 0x66, 0x02, 0x19, 0x46, 0x58, 0x49, 0xa1, 0x27, 0x50, 0x95, 0x23, 0xbb, 0x47, 0x19,
+	0x71, 0x07, 0xa2, 0xd0, 0x4b, 0xb8, 0x22, 0xc1, 0x96, 0xc0, 0xb8, 0xf9, 0x68, 0x78, 0xfa, 0x27,
+	0xea, 0x30, 0x91, 0x99, 0x12, 0x8e, 0xa7, 0xbc, 0x80, 0xdc, 0x28, 0x1a, 0xd2, 0x50, 0x34, 0xa1,
+	0x12, 0x56, 0x33, 0xb4, 0x07, 0xd5, 0x0b, 0x3a, 0xb2, 0x49, 0x1c, 0x57, 0xd1, 0x74, 0xa6, 0xbc,
+	0x4b, 0xfa, 0x95, 0xcc, 0x02, 0xae, 0x5c, 0x24, 0x73, 0xf2, 0x1e, 0xc0, 0xf3, 0x99, 0xad, 0xae,
+	0x93, 0x85, 0x3b, 0x8b, 0xb1, 0xe4, 0xf9, 0x6c, 0x4b, 0x5e, 0x2c, 0x6f, 0x81, 0x4f, 0x6c, 0x79,
+	0xb9, 0x94, 0xee, 0x94, 0x5c, 0xf0, 0x7c, 0xd6, 0xe0, 0x5c, 0xfe, 0xb8, 0xf7, 0x9d, 0x28, 0xb0,
+	0x2f, 0x87, 0x11, 0xe3, 0x6f, 0xfb, 0x60, 0x40, 0x75, 0x10, 0x4d, 0xab, 0xc6, 0xf1, 0xcf, 0xc3,
+	0x88, 0x75, 0x04, 0x8a, 0x5e, 0x80, 0x36, 0xa0, 0xa4, 0x6f, 0xf7, 0x5d, 0xef, 0x8c, 0x86, 0x41,
+	0xe8, 0x7a, 0x4c, 0x2f, 0x8b, 0xe7, 0xd9, 0x3d, 0x8e, 0x6f, 0xdf, 0xc0, 0x9c, 0x1a, 0x05, 0x17,
+	0xee, 0x18, 0xb5, 0x22, 0xa9, 0x1c, 0x4f, 0x52, 0xd7, 0x61, 0x51, 0xa4, 0x7e, 0x8c, 0x5b, 0x15,
+	0x5c, 0x4d, 0x2c, 0x24, 0xc8, 0xc6, 0x5f, 0x33, 0xf2, 0xf5, 0x38, 0x8c, 0xf8, 0xa5, 0xd8, 0xe9,
+	0x36, 0xba, 0x47, 0x9d, 0x89, 0xf2, 0xd5, 0xa0, 0xa2, 0xf0, 0xe3, 0xc6, 0xfe, 0x6e, 0x4b, 0xcb,
+	0x20, 0x04, 0x35, 0x85, 0x58, 0x27, 0xed, 0x5d, 0x6c, 0xb5, 0xb4, 0x6c, 0x02, 0xc3, 0xd6, 0xf1,
+	0xe1, 0x9e, 0xd5, 0xd2, 0x72, 0xe8, 0xa7, 0xa0, 0x2b, 0x6c, 0xfb, 0xa8, 0x7b, 0x84, 0x2d, 0xfb,
+	0xe0, 0xb0, 0x6b, 0x6f, 0x59, 0xdb, 0x87, 0xd8, 0xd2, 0xf2, 0x09, 0x89, 0xdd, 0x03, 0xa9, 0xb9,
+	0xb0, 0xf1, 0xaf, 0x3c, 0x14, 0x45, 0xeb, 0x0a, 0xd1, 0x3e, 0x94, 0xae, 0x7f, 0x64, 0xe8, 0xe7,
+	0x13, 0xb5, 0x39, 0xf1, 0x6f, 0xac, 0xaf, 0xcc, 0x5c, 0x57, 0xcf, 0xbb, 0x13, 0xa8, 0x8e, 0xfd,
+	0x8d, 0x90, 0x31, 0x2e, 0x91, 0xf6, 0xc9, 0xaa, 0x3f, 0xb9, 0x95, 0xa3, 0x34, 0x3b, 0xa0, 0x4d,
+	0xfe, 0x84, 0xd0, 0xd3, 0x69, 0xc1, 0x94, 0x4f, 0x54, 0xfd, 0xd9, 0x5d, 0x34, 0x69, 0xc2, 0x98,
+	0x43, 0x7f, 0x84, 0xda, 0xf8, 0x37, 0x07, 0x4d, 0xf8, 0x96, 0xfa, 0x63, 0xaa, 0xff, 0xe2, 0x76,
+	0xd2, 0xb5, 0xfa, 0x3e, 0x2c, 0x4e, 0xbd, 0xd1, 0xd1, 0xb3, 0x6f, 0xfb, 0x8f, 0xd4, 0x9f, 0xdf,
+	0xc9, 0x4b, 0xda, 0x99, 0x7a, 0x81, 0x4f, 0xda, 0x99, 0xf5, 0xa4, 0x9f, 0xb4, 0x33, 0xf3, 0x29,
+	0x6f, 0xcc, 0x6d, 0x15, 0xfe, 0x90, 0x23, 0x81, 0x7b, 0x5a, 0x14, 0xe7, 0xf4, 0xd7, 0xff, 0x0f,
+	0x00, 0x00, 0xff, 0xff, 0x00, 0x8d, 0xa3, 0x58, 0xa8, 0x10, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -922,6 +1807,18 @@ type RouterClient interface {
 	SetRoutes(ctx context.Context, in *SetRoutesRequest, opts ...grpc.CallOption) (*SetRoutesResponse, error)
 	// ListAppRoutes list routes for a set of apps.
 	ListAppRoutes(ctx context.Context, in *ListAppRoutesRequest, opts ...grpc.CallOption) (*ListAppRoutesResponse, error)
+	// Lists TLS certificates that can be used by routes.
+	ListCertificates(ctx context.Context, in *ListCertificatesRequest, opts ...grpc.CallOption) (*ListCertificatesResponse, error)
+	// Gets a specific TLS certificate.
+	GetCertificate(ctx context.Context, in *GetCertificateRequest, opts ...grpc.CallOption) (*GetCertificateResponse, error)
+	// Creates a TLS certificate. If a certificate with the exact same parameters
+	// already exists, it will be returned instead of creating a duplicate, making
+	// the method idempotent.
+	CreateCertificate(ctx context.Context, in *CreateCertificateRequest, opts ...grpc.CallOption) (*CreateCertificateResponse, error)
+	// Deletes a TLS certificate. The certificate must not be referenced by any
+	// routes. This method is idempotent and will not return an error if the
+	// specified certificate has already been deleted.
+	DeleteCertificate(ctx context.Context, in *DeleteCertificateRequest, opts ...grpc.CallOption) (*DeleteCertificateResponse, error)
 }
 
 type routerClient struct {
@@ -950,6 +1847,42 @@ func (c *routerClient) ListAppRoutes(ctx context.Context, in *ListAppRoutesReque
 	return out, nil
 }
 
+func (c *routerClient) ListCertificates(ctx context.Context, in *ListCertificatesRequest, opts ...grpc.CallOption) (*ListCertificatesResponse, error) {
+	out := new(ListCertificatesResponse)
+	err := c.cc.Invoke(ctx, "/flynn.api.v1.Router/ListCertificates", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routerClient) GetCertificate(ctx context.Context, in *GetCertificateRequest, opts ...grpc.CallOption) (*GetCertificateResponse, error) {
+	out := new(GetCertificateResponse)
+	err := c.cc.Invoke(ctx, "/flynn.api.v1.Router/GetCertificate", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routerClient) CreateCertificate(ctx context.Context, in *CreateCertificateRequest, opts ...grpc.CallOption) (*CreateCertificateResponse, error) {
+	out := new(CreateCertificateResponse)
+	err := c.cc.Invoke(ctx, "/flynn.api.v1.Router/CreateCertificate", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routerClient) DeleteCertificate(ctx context.Context, in *DeleteCertificateRequest, opts ...grpc.CallOption) (*DeleteCertificateResponse, error) {
+	out := new(DeleteCertificateResponse)
+	err := c.cc.Invoke(ctx, "/flynn.api.v1.Router/DeleteCertificate", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RouterServer is the server API for Router service.
 type RouterServer interface {
 	// SetRoutes takes a desired list of routes for a set of apps, calculates the
@@ -964,6 +1897,18 @@ type RouterServer interface {
 	SetRoutes(context.Context, *SetRoutesRequest) (*SetRoutesResponse, error)
 	// ListAppRoutes list routes for a set of apps.
 	ListAppRoutes(context.Context, *ListAppRoutesRequest) (*ListAppRoutesResponse, error)
+	// Lists TLS certificates that can be used by routes.
+	ListCertificates(context.Context, *ListCertificatesRequest) (*ListCertificatesResponse, error)
+	// Gets a specific TLS certificate.
+	GetCertificate(context.Context, *GetCertificateRequest) (*GetCertificateResponse, error)
+	// Creates a TLS certificate. If a certificate with the exact same parameters
+	// already exists, it will be returned instead of creating a duplicate, making
+	// the method idempotent.
+	CreateCertificate(context.Context, *CreateCertificateRequest) (*CreateCertificateResponse, error)
+	// Deletes a TLS certificate. The certificate must not be referenced by any
+	// routes. This method is idempotent and will not return an error if the
+	// specified certificate has already been deleted.
+	DeleteCertificate(context.Context, *DeleteCertificateRequest) (*DeleteCertificateResponse, error)
 }
 
 // UnimplementedRouterServer can be embedded to have forward compatible implementations.
@@ -975,6 +1920,18 @@ func (*UnimplementedRouterServer) SetRoutes(ctx context.Context, req *SetRoutesR
 }
 func (*UnimplementedRouterServer) ListAppRoutes(ctx context.Context, req *ListAppRoutesRequest) (*ListAppRoutesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListAppRoutes not implemented")
+}
+func (*UnimplementedRouterServer) ListCertificates(ctx context.Context, req *ListCertificatesRequest) (*ListCertificatesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListCertificates not implemented")
+}
+func (*UnimplementedRouterServer) GetCertificate(ctx context.Context, req *GetCertificateRequest) (*GetCertificateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCertificate not implemented")
+}
+func (*UnimplementedRouterServer) CreateCertificate(ctx context.Context, req *CreateCertificateRequest) (*CreateCertificateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateCertificate not implemented")
+}
+func (*UnimplementedRouterServer) DeleteCertificate(ctx context.Context, req *DeleteCertificateRequest) (*DeleteCertificateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteCertificate not implemented")
 }
 
 func RegisterRouterServer(s *grpc.Server, srv RouterServer) {
@@ -1017,6 +1974,78 @@ func _Router_ListAppRoutes_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Router_ListCertificates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCertificatesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RouterServer).ListCertificates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/flynn.api.v1.Router/ListCertificates",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RouterServer).ListCertificates(ctx, req.(*ListCertificatesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Router_GetCertificate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCertificateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RouterServer).GetCertificate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/flynn.api.v1.Router/GetCertificate",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RouterServer).GetCertificate(ctx, req.(*GetCertificateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Router_CreateCertificate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateCertificateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RouterServer).CreateCertificate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/flynn.api.v1.Router/CreateCertificate",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RouterServer).CreateCertificate(ctx, req.(*CreateCertificateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Router_DeleteCertificate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteCertificateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RouterServer).DeleteCertificate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/flynn.api.v1.Router/DeleteCertificate",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RouterServer).DeleteCertificate(ctx, req.(*DeleteCertificateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Router_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "flynn.api.v1.Router",
 	HandlerType: (*RouterServer)(nil),
@@ -1028,6 +2057,22 @@ var _Router_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAppRoutes",
 			Handler:    _Router_ListAppRoutes_Handler,
+		},
+		{
+			MethodName: "ListCertificates",
+			Handler:    _Router_ListCertificates_Handler,
+		},
+		{
+			MethodName: "GetCertificate",
+			Handler:    _Router_GetCertificate_Handler,
+		},
+		{
+			MethodName: "CreateCertificate",
+			Handler:    _Router_CreateCertificate_Handler,
+		},
+		{
+			MethodName: "DeleteCertificate",
+			Handler:    _Router_DeleteCertificate_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

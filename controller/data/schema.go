@@ -1,6 +1,8 @@
 package data
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"strings"
 
@@ -967,6 +969,7 @@ DROP TRIGGER check_http_route_update ON http_routes;
 DROP TRIGGER check_http_route_drain_backends ON tcp_routes;
 DROP TRIGGER set_tcp_route_port ON tcp_routes;
 	`)
+	migrations.AddSteps(51, migrateCertificateRefAndMeta)
 }
 
 func MigrateDB(db *postgres.DB) error {
@@ -1114,4 +1117,77 @@ func migrateProcessData(tx *postgres.DBTx) error {
 		}
 	}
 	return nil
+}
+
+func migrateCertificateRefAndMeta(tx *postgres.DBTx) error {
+	// add ref and meta columns
+	if err := tx.Exec(`
+ALTER TABLE certificates ADD COLUMN ref  text;
+ALTER TABLE certificates ADD COLUMN meta jsonb;
+	`); err != nil {
+		return err
+	}
+
+	// load existing certificates
+	type cert struct {
+		id          string
+		cert        string
+		key         string
+		cert_sha256 []byte
+	}
+	rows, err := tx.Query("SELECT id, cert, key, cert_sha256 FROM certificates")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var certs []*cert
+	for rows.Next() {
+		var c cert
+		if err := rows.Scan(
+			&c.id,
+			&c.cert,
+			&c.key,
+			&c.cert_sha256,
+		); err != nil {
+			return err
+		}
+		certs = append(certs, &c)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// populate ref and meta columns
+	isSystemCert := func(c *cert) bool {
+		cert, err := tls.X509KeyPair([]byte(c.cert), []byte(c.key))
+		if err != nil {
+			return false
+		}
+		if len(cert.Certificate) == 0 {
+			return false
+		}
+		leaf, err := x509.ParseCertificate(cert.Certificate[0])
+		if err != nil {
+			return false
+		}
+		ou := leaf.Issuer.OrganizationalUnit
+		return len(ou) == 1 && ou[0] == "Flynn Ephemeral CA"
+	}
+	for _, c := range certs {
+		ref := genCertRef(tx, c.cert, c.key)
+		meta := make(map[string]string)
+		if isSystemCert(c) {
+			ref = "flynn_default_certificate"
+			meta["flynn.ephemeral_ca"] = "true"
+		}
+		if err := tx.Exec("UPDATE certificates SET ref = $1, meta = $2 WHERE id = $3", ref, meta, c.id); err != nil {
+			return err
+		}
+	}
+
+	// ensure the ref is unique
+	return tx.Exec(`
+ALTER TABLE certificates ALTER COLUMN ref SET NOT NULL;
+CREATE UNIQUE INDEX ON certificates (ref) WHERE deleted_at IS NULL;
+	`)
 }
